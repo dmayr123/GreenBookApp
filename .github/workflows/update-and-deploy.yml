@@ -82,9 +82,10 @@ jobs:
 
       # Runs every month rather than annually. Links rot and guidelines age
       # continuously, and a yearly job is one that has eleven months to be
-      # silently wrong -- ivetf.org had already become a parked domain before
-      # anyone noticed. Never fails the build: a association site behind bot
-      # protection must not block publishing current FDA data.
+      # silently wrong -- one organisation domain had already lapsed to a
+      # parked page before anyone noticed. Never fails the build: an
+      # association site behind bot protection must not block publishing
+      # current FDA data.
       - name: Check guideline links and ages
         run: Rscript scripts/check_guideline_links.R 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
         continue-on-error: true

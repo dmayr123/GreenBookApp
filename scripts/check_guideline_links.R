@@ -1,11 +1,12 @@
 # ---------------------------------------------------------------------------
 # check_guideline_links.R -- verify guideline links by CONTENT, not status code
 #
-# A 200 response proves nothing. ivetf.org returned HTTP 200 while actually
-# redirecting to a parked domain ("ww547.ivetf.org") that has nothing to do
-# with the International Veterinary Epilepsy Task Force. Checking only the
-# status code marked that link "verified" and shipped a dead reference to a
-# clinician.
+# A 200 response proves nothing. The International Veterinary Epilepsy Task
+# Force's former organisation domain returned HTTP 200 while actually
+# redirecting to an unsecured parked page with nothing to do with the task
+# force. Checking only the status code marked that link "verified" and shipped
+# a dead reference to a clinician. The entry now points at the consensus paper
+# itself; the old domain is deliberately not recorded anywhere in this repo.
 #
 # So each row in data/reference/guidelines.csv carries an `expect` column: a
 # string that must appear in the fetched page for the link to count as good.
@@ -129,7 +130,16 @@ check_links <- function(path = "data/reference/guidelines.csv") {
     r <- fetch_text(url)
     found <- nzchar(r$text) &&
       str_detect(r$text, regex(expect, ignore_case = TRUE))
+
+    # A guideline link must be HTTPS, both as written and after any redirect.
+    # A lapsed domain that has been re-registered typically lands on a plain
+    # HTTP parked page, so an insecure destination is treated as a failure in
+    # its own right rather than being reported as merely "verified".
+    insecure <- !str_starts(url, "https://") ||
+      (!is.na(r$final) && str_starts(r$final, "http://"))
+
     verdict <- case_when(
+      insecure                             ~ "INSECURE - not HTTPS",
       is.na(r$status)                      ~ "unreachable",
       r$status %in% c(403, 429)            ~ "blocked",
       r$status >= 400                      ~ "http error",
@@ -144,10 +154,11 @@ check_links <- function(path = "data/reference/guidelines.csv") {
 
   print(as.data.frame(res), right = FALSE)
 
-  bad <- res |> filter(verdict == "CONTENT MISMATCH")
+  bad <- res |> filter(verdict %in% c("CONTENT MISMATCH", "INSECURE - not HTTPS"))
   if (nrow(bad)) {
-    warning(sprintf("%d link(s) load but do not contain the expected text: %s",
-                    nrow(bad), paste(bad$url, collapse = ", ")))
+    warning(sprintf(
+      "%d link(s) failed: not HTTPS, or loaded without the expected text: %s",
+      nrow(bad), paste(bad$url, collapse = ", ")))
   }
   invisible(res)
 }

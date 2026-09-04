@@ -245,11 +245,15 @@ CSV — add rows to extend it.
 
 Links are checked **by content, not status code**. `scripts/check_guideline_links.R`
 fetches each URL and requires the string in the `expect` column to appear on
-the page. This matters: `ivetf.org` returned HTTP 200 while actually
-redirecting to a parked domain (`ww547.ivetf.org`) with nothing to do with the
-International Veterinary Epilepsy Task Force. A status-code check called that
-link healthy and shipped a dead reference to a clinician. The IVETF entries
-now point at the open-access consensus papers themselves.
+the page. This matters: the International Veterinary Epilepsy Task Force's
+former organisation domain returned HTTP 200 while actually redirecting to an
+unsecured parked page with nothing to do with the task force. A status-code
+check called that link healthy and shipped a dead reference to a clinician.
+
+**Prefer a direct link to the open-access paper over an organisation's home
+page.** Organisation domains lapse and get re-registered; a paper's DOI or PMC
+identifier does not. The IVETF entry now points at the consensus report
+itself.
 
 ```bash
 Rscript scripts/check_guideline_links.R
