@@ -93,14 +93,33 @@ jobs:
       - name: Build the static site
         run: Rscript scripts/build_static_site.R
 
+      # The built site is kept as a normal artifact regardless, so it can be
+      # downloaded and inspected even when publishing is switched off.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-site
+          path: docs
+          retention-days: 14
+
       - uses: actions/configure-pages@v5
+        if: vars.PUBLISH_PAGES == 'true'
 
       - uses: actions/upload-pages-artifact@v3
+        if: vars.PUBLISH_PAGES == 'true'
         with:
           path: docs
 
+  # Publishing is opt-in via a repository variable rather than automatic.
+  #
+  # GitHub Pages does not serve from a private repository on a free plan, so
+  # while this repo is private the deploy step would fail on every run and
+  # bury real failures in noise. To publish: make the repository public,
+  # enable Pages (Settings -> Pages -> Source: GitHub Actions), then add a
+  # repository variable PUBLISH_PAGES = true (Settings -> Secrets and
+  # variables -> Actions -> Variables).
   deploy:
     needs: build
+    if: vars.PUBLISH_PAGES == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
