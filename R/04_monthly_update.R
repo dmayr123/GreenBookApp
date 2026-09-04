@@ -33,10 +33,20 @@ compare_catalogues <- function(old_path, new_json) {
            applicationStatusCode, proprietaryName, sponsorName,
            voluntaryWithdrawalDate)
 
+  # An empty result still has to carry the columns a populated one would,
+  # including the `_old` twins the join below produces. write_changelog()
+  # filters on applicationType_old, so returning a bare `new[0, ]` here made
+  # the very first run -- the one with nothing to compare against -- fail with
+  # "object 'applicationType_old' not found".
+  empty_changed <- new[0, ] |>
+    mutate(applicationType_old = character(),
+           applicationStatusCode_old = character(),
+           voluntaryWithdrawalDate_old = character())
+
   if (!file_exists(old_path)) {
     message("No previous catalogue; treating every application as new.")
-    return(list(new = new, added = new, changed = new[0, ],
-                withdrawn = new[0, ], refetch = new$applicationId))
+    return(list(new = new, added = new, changed = empty_changed,
+                withdrawn = empty_changed, refetch = new$applicationId))
   }
 
   old <- as_tibble(fromJSON(old_path)) |>
@@ -89,8 +99,16 @@ write_changelog <- function(diff) {
 
   # Conditional approvals converting to full approval are called out
   # separately because that is the single change vets most want flagged.
-  conversions <- diff$changed |>
-    filter(applicationType_old == "C", applicationType == "N")
+  #
+  # Guarded on the column being present: the changelog is a report, and a
+  # shape it did not expect should not be able to abort a data refresh that
+  # has already succeeded.
+  conversions <- if (all(c("applicationType_old", "applicationType") %in%
+                         names(diff$changed))) {
+    diff$changed |> filter(applicationType_old == "C", applicationType == "N")
+  } else {
+    diff$changed[0, ]
+  }
 
   txt <- glue(
     "# Green Book update -- {stamp}\n\n",
