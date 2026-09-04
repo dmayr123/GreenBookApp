@@ -1,0 +1,27 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+.Renviron
+
+# Raw API payloads are large and regenerable from R/01_fetch_adafda.R
+data/raw/
+data/processed/*.parquet
+data/processed/*.rds
+
+# Copyrighted reference material that must NOT be redistributed.
+# Anchored to the repo root so it does not also swallow data/reference/,
+# which holds the curated guideline links and must be tracked.
+/reference/
+*.pdf
+
+# OS
+Thumbs.db
+.DS_Store
+logs/
+
+# Static site build output. Built and deployed by GitHub Actions
+# (.github/workflows/update-and-deploy.yml), never committed -- the compiled
+# WebAssembly runtime is ~100 MB and would bloat the repo every month.
+/docs/
+/build/

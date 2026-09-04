@@ -1,0 +1,548 @@
+# ---------------------------------------------------------------------------
+# app.R -- Green Book drug finder
+#
+# Three views, driven by a single `view` reactive value:
+#   home     species tiles, or a quick search that skips straight to results
+#   results  the filtered, ranked product list
+#   detail   one product: identity, labelled use by species, documents, links
+#
+# The species choice is deliberately sticky across views. A vet who starts by
+# picking "Cattle" is asking every subsequent question in a cattle context, so
+# the dosing shown on the detail page is filtered to cattle unless they clear
+# it. That is the main thing this app does that the FDA site does not.
+# ---------------------------------------------------------------------------
+
+source("global.R", local = FALSE)
+
+# ---------------------------------------------------------------------------
+# UI
+# ---------------------------------------------------------------------------
+
+app_css <- "
+:root { --gb-ink:#1c2b33; --gb-accent:#0b6b5e; --gb-line:#dfe6e9; }
+body { background:#f6f8f9; }
+.gb-hero { padding: 2rem 0 1rem; }
+.gb-hero h1 { font-weight: 700; letter-spacing:-.02em; color:var(--gb-ink); }
+.gb-sub { color:#5a6b74; max-width: 46rem; }
+
+.species-grid {
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+  gap:.75rem; margin-top:1rem;
+}
+.species-tile {
+  border:1px solid var(--gb-line); border-radius:14px; background:#fff;
+  padding:1rem .5rem; text-align:center; cursor:pointer; width:100%;
+  transition:transform .08s ease, box-shadow .08s ease, border-color .08s;
+}
+.species-tile:hover { transform:translateY(-2px);
+  box-shadow:0 6px 18px rgba(12,40,50,.10); border-color:var(--gb-accent); }
+.species-tile.empty { opacity:.45; }
+.species-tile .icon { font-size:2rem; line-height:1; display:block; }
+.species-tile .label { font-weight:600; color:var(--gb-ink); margin-top:.4rem;
+  display:block; font-size:.95rem; }
+.species-tile .count { color:#7b8b94; font-size:.78rem; }
+.species-tile .major { font-size:.66rem; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--gb-accent); }
+
+.badge-cat { font-size:.72rem; font-weight:700; padding:.22rem .55rem;
+  border-radius:999px; white-space:nowrap; }
+.cat-approved   { background:#e4f1ec; color:#0b6b5e; }
+.cat-generic    { background:#e7eef7; color:#23558c; }
+.cat-conditional{ background:#fdf0dc; color:#8a5310; }
+.cat-eua        { background:#f6e6f0; color:#7c2a5c; }
+.cat-other      { background:#eceff1; color:#546069; }
+.badge-withdrawn{ background:#fbe6e6; color:#8f2626; font-size:.72rem;
+  font-weight:700; padding:.22rem .55rem; border-radius:999px; }
+
+.muted { color:#8a969d; font-style:italic; }
+.field-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.07em;
+  color:#7b8b94; font-weight:700; margin-bottom:.15rem; }
+.field-value { margin-bottom:.9rem; color:var(--gb-ink); }
+.dose-card { border:1px solid var(--gb-line); border-left:4px solid var(--gb-accent);
+  border-radius:10px; background:#fff; padding:.9rem 1rem; margin-bottom:.75rem; }
+.dose-pop { font-weight:700; color:var(--gb-ink); margin-bottom:.35rem; }
+.extralabel { border-left-color:#b0762a; }
+.doc-link { display:block; padding:.45rem 0; border-bottom:1px solid var(--gb-line); }
+.gb-footer { color:#7b8b94; font-size:.82rem; padding:2rem 0 1rem; }
+.disclaimer { background:#fff8e6; border:1px solid #f0dfae; border-radius:10px;
+  padding:.75rem 1rem; font-size:.85rem; color:#6b551f; }
+"
+
+ui <- page_fluid(
+  theme = bs_theme(version = 5, primary = "#0b6b5e", base_font = font_google("Inter")),
+  tags$head(tags$style(HTML(app_css)), tags$title("Green Book Drug Finder")),
+  uiOutput("page")
+)
+
+# -- home --------------------------------------------------------------------
+
+home_ui <- function() {
+  tagList(
+    div(class = "gb-hero",
+      h1("Green Book Drug Finder"),
+      p(class = "gb-sub",
+        "Every FDA-approved, conditionally approved and generic animal drug, ",
+        "searchable the way you actually look things up. Start with a species, ",
+        "or search directly if you know what you want.")
+    ),
+    card(
+      card_body(
+        h5("Quick drug search"),
+        div(class = "d-flex gap-2",
+          div(style = "flex:1",
+              textInput("home_query", NULL, width = "100%",
+                        placeholder = "Trade name, active ingredient, sponsor or application number")),
+          div(actionButton("home_go", "Search", class = "btn-primary"))
+        ),
+        div(class = "text-muted small",
+            "Punctuation and spacing are ignored, so ", tags$code("CA-1"), ", ",
+            tags$code("-CA-1"), " and ", tags$code("CA1"), " all find the same products.")
+      )
+    ),
+    div(class = "mt-4",
+      h5("Browse by species"),
+      p(class = "text-muted small mb-0",
+        "Choosing a species filters the labelled dose and indication shown on each drug."),
+      div(class = "species-grid",
+        pmap(SPECIES_TILES, function(group, label, icon, major, n) {
+          actionButton(
+            inputId = paste0("sp_", group),
+            label = tagList(
+              span(class = "icon", icon),
+              span(class = "label", label),
+              span(class = "count", if (n > 0) paste(n, "products") else "no products"),
+              if (isTRUE(major)) span(class = "major", "major species") else NULL
+            ),
+            class = paste("species-tile", if (n == 0) "empty" else "")
+          )
+        })
+      )
+    ),
+    div(class = "gb-footer",
+      sprintf("Data from Animal Drugs @ FDA, built %s. ", DATA_BUILT),
+      sprintf("%s applications, %s products.",
+              format(nrow(APPLICATIONS), big.mark = ","),
+              format(nrow(PRODUCTS), big.mark = ","))
+    )
+  )
+}
+
+# -- results -----------------------------------------------------------------
+
+results_ui <- function(species_label) {
+  tagList(
+    div(class = "d-flex align-items-center gap-2 mt-3 mb-2",
+      actionLink("back_home", "← Home"),
+      if (!is.null(species_label))
+        span(class = "badge-cat cat-approved", species_label) else NULL
+    ),
+    card(card_body(
+      layout_columns(
+        col_widths = c(5, 3, 4),
+        textInput("query", "Search", width = "100%",
+                  placeholder = "Trade name, ingredient, sponsor, application no."),
+        selectInput("species_sel", "Species", width = "100%",
+                    choices = c("Any species" = "any",
+                                setNames(SPECIES_GROUPS$group, SPECIES_GROUPS$label))),
+        checkboxGroupInput("cats", "Product type", inline = TRUE,
+                           choices = CATEGORIES, selected = CATEGORIES)
+      ),
+      div(class = "d-flex gap-3",
+        checkboxInput("deep", "Also search indications and strengths", FALSE),
+        checkboxInput("withdrawn", "Include voluntarily withdrawn", FALSE)
+      )
+    )),
+    div(class = "mt-2 mb-2", textOutput("result_count")),
+    card(card_body(reactableOutput("results")))
+  )
+}
+
+# -- detail ------------------------------------------------------------------
+
+field <- function(label, value) {
+  div(div(class = "field-label", label), div(class = "field-value", value))
+}
+
+detail_ui <- function() {
+  tagList(
+    div(class = "d-flex align-items-center gap-3 mt-3 mb-2",
+        actionLink("back_results", "← Back to results"),
+        actionLink("back_home2", "Home")),
+    uiOutput("detail")
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+
+server <- function(input, output, session) {
+
+  view      <- reactiveVal("home")
+  species   <- reactiveVal("any")   # sticky across views
+  selected  <- reactiveVal(NULL)    # proprietaryNameId
+
+  output$page <- renderUI({
+    switch(view(),
+      home    = home_ui(),
+      results = results_ui(species_label()),
+      detail  = detail_ui()
+    )
+  })
+
+  species_label <- reactive({
+    g <- species()
+    if (is.null(g) || g == "any") return(NULL)
+    SPECIES_GROUPS$label[SPECIES_GROUPS$group == g]
+  })
+
+  # -- navigation ------------------------------------------------------------
+
+  # One observer per tile. The tiles are fixed at startup, so registering them
+  # once here is simpler than a JS bridge and keeps the ids greppable.
+  walk(SPECIES_GROUPS$group, function(g) {
+    observeEvent(input[[paste0("sp_", g)]], {
+      species(g)
+      view("results")
+    }, ignoreInit = TRUE)
+  })
+
+  observeEvent(input$home_go, {
+    # Read the reactive here and close over the plain value: onFlushed()
+    # callbacks run outside the reactive context, so touching input$ or a
+    # reactiveVal inside one aborts the session.
+    q <- input$home_query %||% ""
+    species("any")
+    view("results")
+    # Defer until the results UI exists, otherwise the input does not yet
+    # have a binding to receive the value.
+    session$onFlushed(function() {
+      updateTextInput(session, "query", value = q)
+    }, once = TRUE)
+  })
+
+  observeEvent(input$back_home,    { view("home") })
+  observeEvent(input$back_home2,   { view("home") })
+  observeEvent(input$back_results, { view("results") })
+
+  observeEvent(input$species_sel, { species(input$species_sel) },
+               ignoreInit = TRUE)
+
+  # Keep the dropdown showing whatever tile the user pressed. The species is
+  # captured here rather than read inside the callback, for the same reason
+  # as above.
+  observeEvent(view(), {
+    if (identical(view(), "results")) {
+      g <- species()
+      session$onFlushed(function() {
+        updateSelectInput(session, "species_sel", selected = g)
+      }, once = TRUE)
+    }
+  })
+
+  # -- results ---------------------------------------------------------------
+
+  hits <- reactive({
+    search_drugs(
+      SEARCH_INDEX,
+      query             = input$query %||% "",
+      deep              = isTRUE(input$deep),
+      species_group     = species(),
+      categories        = input$cats,
+      include_withdrawn = isTRUE(input$withdrawn)
+    )
+  })
+
+  output$result_count <- renderText({
+    n <- nrow(hits())
+    q <- str_trim(input$query %||% "")
+    sprintf("%s product%s%s", format(n, big.mark = ","),
+            if (n == 1) "" else "s",
+            if (nzchar(q)) paste0(" matching \"", q, "\"") else "")
+  })
+
+  output$results <- renderReactable({
+    d <- hits()
+    if (nrow(d) == 0) {
+      return(reactable(data.frame(Result = "No products match those filters.")))
+    }
+
+    tbl <- d |>
+      transmute(
+        proprietaryNameId,
+        Product     = proprietaryName,
+        Ingredients = coalesce(ingredients, ""),
+        Type        = category,
+        Status      = marketStatus,
+        Labeler     = coalesce(sponsorName, ""),
+        Form        = coalesce(doseFormName, ""),
+        Species     = coalesce(speciesList, ""),
+        Application = applicationNumber
+      )
+
+    reactable(
+      tbl,
+      searchable = FALSE, highlight = TRUE, compact = TRUE,
+      defaultPageSize = 25, showPageSizeOptions = TRUE,
+      pageSizeOptions = c(10, 25, 50, 100),
+      onClick = JS("function(rowInfo){
+        Shiny.setInputValue('row_clicked',
+          rowInfo.row.proprietaryNameId, {priority:'event'});
+      }"),
+      rowStyle = list(cursor = "pointer"),
+      columns = list(
+        proprietaryNameId = colDef(show = FALSE),
+        Product = colDef(minWidth = 160, cell = function(v) strong(v)),
+        Ingredients = colDef(minWidth = 150),
+        Type = colDef(minWidth = 130, html = TRUE, cell = function(v) {
+          sprintf('<span class="badge-cat %s">%s</span>', category_class(v), v)
+        }),
+        Status = colDef(minWidth = 120, html = TRUE, cell = function(v) {
+          if (identical(v, "Voluntarily withdrawn"))
+            '<span class="badge-withdrawn">Withdrawn</span>' else v
+        }),
+        Labeler = colDef(minWidth = 150),
+        Form = colDef(minWidth = 110),
+        Species = colDef(minWidth = 150),
+        Application = colDef(minWidth = 100)
+      )
+    )
+  })
+
+  observeEvent(input$row_clicked, {
+    selected(as.integer(input$row_clicked))
+    view("detail")
+  })
+
+  # -- detail ----------------------------------------------------------------
+
+  output$detail <- renderUI({
+    pid <- selected()
+    req(pid)
+
+    prod <- PRODUCTS |> filter(proprietaryNameId == pid) |> slice(1)
+    if (nrow(prod) == 0) return(p("Product not found."))
+
+    app  <- APPLICATIONS |> filter(applicationId == prod$applicationId) |> slice(1)
+    ings <- INGREDIENTS  |> filter(applicationId == prod$applicationId)
+    sp   <- SPECIES      |> filter(proprietaryNameId == pid)
+    docs <- DOCUMENTS    |> filter(applicationId == prod$applicationId)
+    ndc  <- NDC          |> filter(proprietaryNameId == pid)
+
+    # Dosing is filtered to the chosen species when we can tell which
+    # population headers belong to it. FDA does not link ail headers to
+    # species codes, so we match on the header text naming the species or its
+    # use classes -- and fall back to showing everything rather than hiding
+    # doses we cannot confidently attribute.
+    dose <- DOSING |> filter(proprietaryNameId == pid)
+    g <- species()
+    dose_note <- NULL
+    if (!is.null(g) && g != "any" && nrow(dose) > 0) {
+      sp_g <- sp |> filter(speciesGroup == g)
+      if (nrow(sp_g) > 0) {
+        terms <- norm_text(c(sp_g$speciesName, sp_g$useClass,
+                             SPECIES_GROUPS$label[SPECIES_GROUPS$group == g]))
+        terms <- unique(terms[nzchar(terms)])
+        hdr <- norm_text(dose$populationHeader)
+        keep <- map_lgl(hdr, function(h) any(str_detect(h, fixed(terms))) ||
+                                          !nzchar(h))
+        if (any(keep)) {
+          dose <- dose[keep, , drop = FALSE]
+          dose_note <- sprintf("Showing doses labelled for %s.", species_label())
+        } else {
+          dose_note <- paste0(
+            "FDA does not separate this product's dose statements by species, ",
+            "so all labelled doses are shown.")
+        }
+      }
+    }
+
+    pioneer <- if (!is.na(app$pioneerApplicationNumber)) {
+      APPLICATIONS |> filter(applicationNumber == app$pioneerApplicationNumber) |> slice(1)
+    } else NULL
+
+    classes <- if (nrow(ings)) {
+      classify_ingredients(ings$activeIngredientName)$drugClass |> unique()
+    } else character()
+    guides <- match_guidelines(GUIDELINES, classes, unique(sp$speciesGroup))
+
+    tagList(
+      # -- identity ----------------------------------------------------------
+      card(card_body(
+        div(class = "d-flex justify-content-between align-items-start flex-wrap gap-2",
+          div(
+            h3(prod$proprietaryName, class = "mb-1"),
+            div(class = "text-muted",
+                sprintf("%s %s", app$applicationType, app$applicationNumber))
+          ),
+          div(class = "d-flex gap-2 align-items-center",
+            span(class = paste("badge-cat", category_class(app$category)), app$category),
+            if (app$marketStatus == "Voluntarily withdrawn")
+              span(class = "badge-withdrawn", "Voluntarily withdrawn") else NULL
+          )
+        ),
+        # The trade name and FDA's classification can disagree; say so rather
+        # than showing both and letting the reader pick.
+        if (ca1_mismatch(prod$proprietaryName, app$category))
+          div(class = "disclaimer mt-2",
+            strong("Name says CA1, FDA says full approval. "),
+            sprintf(paste0(
+              "The trade name still carries a conditional-approval suffix, but ",
+              "FDA lists this application as %s. The suffix usually lingers ",
+              "after a conditional approval converts."), app$category))
+        else NULL,
+        hr(),
+        layout_columns(
+          col_widths = c(4, 4, 4),
+          # NDC is joined from DailyMed by name, so it is genuinely absent for
+          # most products. A search link is more use to a vet than an empty
+          # field, and far more use than a guessed code.
+          field("NDC", if (nrow(ndc)) {
+            codes <- unique(ndc$ndc)
+            tagList(
+              paste(head(codes, 6), collapse = ", "),
+              if (length(codes) > 6)
+                span(class = "muted", sprintf(" +%d more", length(codes) - 6))
+              else NULL,
+              if (any(ndc$matchType != "exact name"))
+                div(class = "muted small",
+                    "matched to a single DailyMed label by name stem")
+              else NULL,
+              div(tags$a(href = ndc$dailymedUrl[1], target = "_blank",
+                         rel = "noopener", class = "small", "View on DailyMed"))
+            )
+          } else {
+            tagList(
+              span(class = "muted", "Not listed in DailyMed"),
+              div(tags$a(
+                href = paste0(
+                  "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query=",
+                  utils::URLencode(prod$proprietaryName, reserved = TRUE)),
+                target = "_blank", rel = "noopener", class = "small",
+                "Search DailyMed for this product"))
+            )
+          }),
+          field("Current status", app$marketStatus),
+          field("Product type", app$category)
+        ),
+        layout_columns(
+          col_widths = c(4, 4, 4),
+          field("Active ingredients",
+                if (nrow(ings)) paste(unique(ings$activeIngredientName), collapse = ", ")
+                else or_none(NA)),
+          field("Labeler / sponsor", or_none(app$sponsorName)),
+          field("Dispensing status", or_none(prod$dispensingStatus))
+        ),
+        layout_columns(
+          col_widths = c(4, 4, 4),
+          field("Dosage form", or_none(prod$doseFormName)),
+          field("Route", or_none(prod$routes)),
+          field("Strength / specifications", or_none(prod$specifications))
+        )
+      )),
+
+      # -- species and labelled use -----------------------------------------
+      card(card_body(
+        h5("Labelled species and use class"),
+        if (nrow(sp) == 0) p(class = "muted", "No species listed.") else
+          div(map(seq_len(nrow(sp)), function(i) {
+            div(class = "mb-1",
+              strong(sp$speciesName[i]),
+              if (!is.na(sp$useClass[i]) && nzchar(sp$useClass[i]))
+                span(" — ", sp$useClass[i]) else NULL)
+          }))
+      )),
+
+      # -- dosing ------------------------------------------------------------
+      card(card_body(
+        h5("Labelled dose and indication"),
+        div(class = "disclaimer mb-3",
+          strong("FDA-labelled use. "),
+          "Everything in this section is taken from the approved label as ",
+          "published by FDA. Any use outside these species, doses, routes or ",
+          "indications is extra-label and is your professional responsibility ",
+          "under AMDUCA. This app does not provide extra-label dosing."),
+        if (!is.null(dose_note)) p(class = "text-muted small", dose_note) else NULL,
+        if (nrow(dose) == 0) p(class = "muted", "No dose statements published for this product.")
+        else div(map(seq_len(nrow(dose)), function(i) {
+          div(class = "dose-card",
+            if (!is.na(dose$populationHeader[i]) && nzchar(dose$populationHeader[i]))
+              div(class = "dose-pop", dose$populationHeader[i]) else NULL,
+            div(class = "field-label", "Indication"),
+            div(class = "field-value", fda_html(dose$indicationHtml[i]) %||%
+                                        or_none(dose$indication[i])),
+            div(class = "field-label", "Dose"),
+            div(class = "field-value", fda_html(dose$dosageHtml[i]) %||%
+                                        or_none(dose$dosage[i])),
+            if (!is.na(dose$limitation[i]) && nzchar(dose$limitation[i]))
+              tagList(div(class = "field-label", "Limitations"),
+                      div(class = "field-value", fda_html(dose$limitationHtml[i])))
+            else NULL
+          )
+        })),
+        if (!is.na(prod$withdrawalPeriod) && nzchar(prod$withdrawalPeriod))
+          tagList(hr(), div(class = "field-label", "Withdrawal period"),
+                  div(class = "field-value", fda_html(prod$withdrawalHtml)))
+        else NULL
+      )),
+
+      # -- documents ---------------------------------------------------------
+      card(card_body(
+        h5("Documents and further reading"),
+        if (nrow(docs) == 0) p(class = "muted", "No documents published for this application.")
+        else div(map(seq_len(nrow(docs)), function(i) {
+          tags$a(class = "doc-link", href = docs$url[i], target = "_blank",
+                 rel = "noopener",
+                 strong(docs$docType[i]), " — ", docs$title[i],
+                 if (!is.na(docs$docDate[i])) span(class = "text-muted",
+                                                   paste0(" (", docs$docDate[i], ")")) else NULL)
+        })),
+        hr(),
+        div(class = "field-label", "Pioneer product"),
+        div(class = "field-value",
+          if (!is.null(pioneer) && nrow(pioneer) > 0) {
+            tagList(
+              sprintf("This is a generic of application %s. ",
+                      pioneer$applicationNumber),
+              tags$a(href = paste0(
+                "https://animaldrugsatfda.fda.gov/adafda/views/#/search/",
+                pioneer$applicationNumber),
+                target = "_blank", rel = "noopener",
+                "View the pioneer product at FDA")
+            )
+          } else span(class = "muted",
+                      "This is the pioneer product (no earlier application listed).")
+        ),
+        div(class = "field-label", "This record at FDA"),
+        div(class = "field-value",
+          tags$a(href = "https://animaldrugsatfda.fda.gov/adafda/views/#/search",
+                 target = "_blank", rel = "noopener",
+                 "Animal Drugs @ FDA"))
+      )),
+
+      # -- guidelines --------------------------------------------------------
+      card(card_body(
+        h5("Professional guidance"),
+        p(class = "text-muted small",
+          "Matched on this product's drug class and labelled species. ",
+          "These are links to the publishing organisation, not a statement ",
+          "that a guideline endorses this product."),
+        if (nrow(guides) == 0) p(class = "muted", "No mapped guidance for this drug class.")
+        else div(map(seq_len(nrow(guides)), function(i) {
+          tags$a(class = "doc-link", href = guides$url[i], target = "_blank",
+                 rel = "noopener",
+                 strong(guides$organization[i]), " — ", guides$title[i])
+        })),
+        hr(),
+        p(class = "text-muted small mb-0",
+          "For extra-label dosing, consult Plumb's Veterinary Drug Handbook ",
+          "or another licensed formulary. This app deliberately does not ",
+          "reproduce copyrighted formulary content.")
+      ))
+    )
+  })
+}
+
+`%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+
+shinyApp(ui, server)
