@@ -54,9 +54,24 @@ ADAFDA_PUBLIC <- "https://animaldrugsatfda.fda.gov/adafda/app/search/public"
 
 # -- text helpers ------------------------------------------------------------
 
+#' Restore the comparison operators FDA stores as words.
+#'
+#' ADAFDA persists "≤" and "≥" as the literal strings "lessThanEqualTo" and
+#' "greaterThanEqualTo", and its own front end swaps them back before display
+#' (see convertSigns() in searchResultService.js). Without the same step a
+#' dose reads "for dogs weighing lessThanEqualTo 140 pounds", which is both
+#' wrong-looking and harder to read quickly -- and these appear in dosing
+#' text, where a misread threshold matters.
+decode_fda_signs <- function(x) {
+  x |>
+    str_replace_all("lessThanEqualTo", "≤") |>
+    str_replace_all("greaterThanEqualTo", "≥")
+}
+
 #' Strip HTML tags and decode the handful of entities FDA actually emits.
 strip_html <- function(x) {
   x |>
+    decode_fda_signs() |>
     str_replace_all("<br\\s*/?>", " ") |>
     str_replace_all("</p>", " ") |>
     str_replace_all("<[^>]*>", "") |>
@@ -97,6 +112,59 @@ chr1 <- function(x) if (is.null(x) || length(x) == 0) NA_character_ else as.char
 
 # -- collapsed product category ---------------------------------------------
 
+# A conditionally approved product is required to carry a "-CA1" suffix in its
+# proprietary name. This regex is permissive about spacing, case and the
+# trailing digit so "-CA1", "-ca 1" and a future "-CA2" all match.
+CA_SUFFIX <- regex("-\\s*CA\\s*[0-9]+", ignore_case = TRUE)
+
+#' Identify conditionally approved applications.
+#'
+#' FDA's `applicationType` field cannot be trusted for this. It reports only 7
+#' of the 11 conditional approvals in the catalogue: CANALEVIA-CA1,
+#' Varenzin-CA1, Credelio Quattro-CA1 and Baytril 100-CA1 are all typed "N"
+#' (full NADA) despite being conditional. That was confirmed three ways --
+#' the mandatory "-CA1" name suffix, FDA's own indication text ("Conditionally
+#' approved for the control of nonregenerative anemia..." for Varenzin), and
+#' the DailyMed label, which states "Marketing Status: Conditional New Animal
+#' Drug Application" for CANALEVIA.
+#'
+#' Presenting a conditional approval as a full approval is a clinically
+#' meaningful error -- conditional approval means effectiveness has not yet
+#' been fully demonstrated -- so all three signals are unioned rather than
+#' trusting the single structured field.
+#'
+#' Returns one row per application with the flag and its provenance.
+detect_conditional <- function(applications, products, dosing) {
+  by_name <- products |>
+    filter(str_detect(coalesce(proprietaryName, ""), CA_SUFFIX)) |>
+    distinct(applicationId) |>
+    mutate(condByName = TRUE)
+
+  by_text <- dosing |>
+    filter(str_detect(
+      coalesce(paste(limitationHtml, indicationHtml, dosageHtml), ""),
+      regex("conditionally approved", ignore_case = TRUE))) |>
+    distinct(applicationId) |>
+    mutate(condByLabel = TRUE)
+
+  applications |>
+    select(applicationId, applicationType) |>
+    left_join(by_name, by = "applicationId") |>
+    left_join(by_text, by = "applicationId") |>
+    mutate(
+      condByName  = coalesce(condByName, FALSE),
+      condByLabel = coalesce(condByLabel, FALSE),
+      condByType  = applicationType == "C",
+      isConditional = condByName | condByLabel | condByType,
+      # True when FDA's own type field contradicts the other evidence. The app
+      # surfaces this so a vet can see the discrepancy rather than silently
+      # trusting either side.
+      fdaTypeDisagrees = isConditional & !coalesce(condByType, FALSE)
+    ) |>
+    select(applicationId, isConditional, fdaTypeDisagrees,
+           condByName, condByLabel, condByType)
+}
+
 #' Collapse FDA's application type + status into the four categories a
 #' clinician actually distinguishes between.
 #'
@@ -105,8 +173,13 @@ chr1 <- function(x) if (is.null(x) || length(x) == 0) NA_character_ else as.char
 #' shows combinations that mean the same thing clinically. Withdrawal is
 #' reported separately from the category because a withdrawn generic is still
 #' a generic -- the vet needs to know both facts, not one merged one.
-collapse_category <- function(application_type, status_code) {
+#'
+#' `is_conditional` comes from detect_conditional() and overrides the type
+#' field, which is unreliable for exactly this distinction.
+collapse_category <- function(application_type, status_code,
+                              is_conditional = FALSE) {
   case_when(
+    is_conditional          ~ "Conditional Approval",
     application_type == "C" ~ "Conditional Approval",
     application_type == "A" ~ "ANADA / Generic",
     application_type == "N" ~ "NADA / Approved",
@@ -320,13 +393,19 @@ build_all <- function() {
   pioneers   <- map2_dfr(beans, ids, extract_pioneer)
   documents  <- bind_rows(documents, read_spl())
 
+  conditional <- detect_conditional(catalogue, products, dosing)
+
   applications <- catalogue |>
     select(applicationId, applicationNumber, applicationType,
            applicationStatusCode, publishDate, voluntaryWithdrawalDate) |>
     left_join(sponsors, by = "applicationId") |>
     left_join(pioneers, by = "applicationId") |>
+    left_join(conditional, by = "applicationId") |>
     mutate(
-      category      = collapse_category(applicationType, applicationStatusCode),
+      isConditional    = coalesce(isConditional, FALSE),
+      fdaTypeDisagrees = coalesce(fdaTypeDisagrees, FALSE),
+      category      = collapse_category(applicationType, applicationStatusCode,
+                                        isConditional),
       marketStatus  = marketing_status(applicationStatusCode, voluntaryWithdrawalDate),
       # An application whose pioneer number points at itself (or at 0) is the
       # pioneer; only generics carry a meaningful pointer.
@@ -336,6 +415,18 @@ build_all <- function() {
         NA_integer_, pioneerApplicationNumber
       )
     )
+
+  # The app renders the *Html columns directly, so the sign decoding has to be
+  # applied to them too -- not only to the plain-text twins derived below.
+  dosing <- dosing |>
+    mutate(across(c(dosageHtml, indicationHtml, limitationHtml),
+                  decode_fda_signs))
+  products <- products |>
+    mutate(across(c(withdrawalHtml, specifications), decode_fda_signs))
+  ingredients <- ingredients |>
+    mutate(toleranceHtml = decode_fda_signs(toleranceHtml))
+  documents <- documents |>
+    mutate(summaryHtml = decode_fda_signs(summaryHtml))
 
   # Plain-text twins for search / display.
   dosing <- dosing |>

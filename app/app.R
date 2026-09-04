@@ -381,15 +381,21 @@ server <- function(input, output, session) {
               span(class = "badge-withdrawn", "Voluntarily withdrawn") else NULL
           )
         ),
-        # The trade name and FDA's classification can disagree; say so rather
-        # than showing both and letting the reader pick.
-        if (ca1_mismatch(prod$proprietaryName, app$category))
+        # Where FDA's structured type field contradicts the evidence, say so
+        # explicitly. The vet is being shown "Conditional Approval" while
+        # FDA's own website shows "NADA", and needs to know why.
+        if (isTRUE(app$fdaTypeDisagrees))
           div(class = "disclaimer mt-2",
-            strong("Name says CA1, FDA says full approval. "),
+            strong("Conditionally approved. "),
             sprintf(paste0(
-              "The trade name still carries a conditional-approval suffix, but ",
-              "FDA lists this application as %s. The suffix usually lingers ",
-              "after a conditional approval converts."), app$category))
+              "Effectiveness has not been fully demonstrated. Note that FDA's ",
+              "Animal Drugs @ FDA database types this application as \"%s\", ",
+              "which is incorrect — the conditional status is confirmed by the ",
+              "mandatory -CA1 name suffix%s. Always read the label."),
+              app$applicationType,
+              if (isTRUE(app$condByLabel))
+                " and by FDA's own indication text" else
+                " and by the product's DailyMed label"))
         else NULL,
         hr(),
         layout_columns(

@@ -69,12 +69,43 @@ NDC <- read_table("ndc") %||%
   tibble(proprietaryNameId = integer(), ndc = character(), setid = character(),
          matchType = character(), splTitle = character(), dailymedUrl = character())
 
+# A linked paper or guideline must not be more than this many years old.
+# Clinical recommendations go stale; an out-of-date consensus statement is
+# worse than no link, because it carries the authority of the issuing body
+# without its current position.
+GUIDELINE_MAX_AGE_YEARS <- 15
+
+#' Drop dated guidelines that have aged out.
+#'
+#' Enforced here, at load, rather than by an annual clean-up of the CSV. A
+#' rule that depends on someone remembering to run something once a year is a
+#' rule that eventually lapses silently; this way the cutoff moves on its own
+#' every time the app starts.
+#'
+#' Rows with no `published` year are organisation hubs (AVMA's policy index,
+#' AAHA's guidelines page). Those are continuously revised and carry no single
+#' publication date, so they are never expired by age.
+drop_expired_guidelines <- function(g, today = Sys.Date()) {
+  if (!"published" %in% names(g) || nrow(g) == 0) return(g)
+  cutoff <- as.integer(format(today, "%Y")) - GUIDELINE_MAX_AGE_YEARS
+
+  expired <- !is.na(g$published) & g$published < cutoff
+  if (any(expired)) {
+    warning(sprintf(
+      "Dropped %d guideline link(s) older than %d years (published before %d): %s",
+      sum(expired), GUIDELINE_MAX_AGE_YEARS, cutoff,
+      paste(unique(g$title[expired]), collapse = "; ")))
+  }
+  g[!expired, , drop = FALSE]
+}
+
 GUIDELINES <- if (file.exists(ref("guidelines.csv"))) {
-  read_csv(ref("guidelines.csv"), show_col_types = FALSE)
+  read_csv(ref("guidelines.csv"), show_col_types = FALSE) |>
+    drop_expired_guidelines()
 } else {
   tibble(match_type = character(), match_value = character(),
          organization = character(), org_type = character(),
-         title = character(), url = character(),
+         title = character(), url = character(), published = integer(),
          link_status = character(), note = character())
 }
 
@@ -96,25 +127,12 @@ category_class <- function(x) {
   )
 }
 
-#' Does the trade name claim conditional approval that FDA's data contradicts?
-#'
-#' Sponsors are required to carry a "-CA1" suffix while a product is
-#' conditionally approved. When the conditional approval converts to a full
-#' NADA the suffix often persists in the trade name for a while, so FDA's
-#' catalogue lists products such as CANALEVIA-CA1 and Varenzin-CA1 as
-#' `applicationType = "N"`. A vet reading only the name would reasonably infer
-#' the product is still conditionally approved, so the discrepancy is worth
-#' stating explicitly rather than leaving the two facts to contradict each
-#' other silently.
-name_suggests_conditional <- function(proprietary_name) {
-  str_detect(coalesce(proprietary_name, ""), regex("-\\s?CA\\s?[0-9]+\\b",
-                                                   ignore_case = TRUE))
-}
-
-ca1_mismatch <- function(proprietary_name, category) {
-  name_suggests_conditional(proprietary_name) &
-    category != "Conditional Approval"
-}
+# Conditional-approval detection lives in R/02_tidy_greenbook.R
+# (detect_conditional) and reaches the app as the `isConditional` and
+# `fdaTypeDisagrees` columns on APPLICATIONS. It is deliberately not
+# recomputed here: FDA's applicationType field is wrong for 4 of the 11
+# conditional approvals, and the correction must be applied once, in the
+# pipeline, so the app and any other consumer of the tables agree.
 
 #' Render a value, or a muted placeholder when it is missing.
 or_none <- function(x, placeholder = "Not listed") {

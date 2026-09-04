@@ -1,25 +1,26 @@
-match_type,match_value,species_scope,organization,org_type,title,url,link_status,note
-class,antimicrobial,,AVMA,AVMA policy,Judicious Therapeutic Use of Antimicrobials,https://www.avma.org/resources-tools/avma-policies/judicious-therapeutic-use-antimicrobials,bot_blocked,Umbrella AVMA policy on antimicrobial stewardship.
-class,antimicrobial,,AVMA,AVMA policy,AVMA Policies (full index),https://www.avma.org/resources-tools/avma-policies,bot_blocked,Searchable index of all current AVMA policies.
-class,antimicrobial,cattle,AABP,Allied caucus,AABP Guidelines (prudent antimicrobial use in cattle),https://www.aabp.org/Resources/AABP_Guidelines/,bot_blocked,American Association of Bovine Practitioners.
-class,antimicrobial,swine,AASV,Allied caucus,AASV Position Statements (antimicrobial judicious use),https://www.aasv.org/position-statements/,verified,American Association of Swine Veterinarians.
-class,antimicrobial,horses,AAEP,Allied caucus,AAEP Guidelines (antimicrobial stewardship),https://aaep.org/resource/guidelines/,bot_blocked,American Association of Equine Practitioners.
-class,anticonvulsant,,IVETF,Consensus group,International Veterinary Epilepsy Task Force Consensus Reports,https://www.ivetf.org/,verified,Consensus statements on canine and feline epilepsy diagnosis and treatment.
-class,anticonvulsant,,ACVIM,Consensus group,ACVIM Endorsed Statements,https://www.acvim.org/journals-research/research/acvim-endorsed-statements,verified,Browse for neurology consensus statements.
-class,cardiac,,ACVIM,Consensus group,ACVIM Endorsed Statements (incl. myxomatous mitral valve disease),https://www.acvim.org/journals-research/research/acvim-endorsed-statements,verified,ACVIM consensus on staging and treatment of canine cardiac disease.
-class,endocrine,,ACVIM,Consensus group,ACVIM Endorsed Statements (incl. endocrinology),https://www.acvim.org/journals-research/research/acvim-endorsed-statements,verified,Consensus statements on hyperadrenocorticism and related disease.
-class,nsaid,dogs,AAHA,Allied caucus,AAHA Guidelines (pain management),https://www.aaha.org/resources/guidelines/,bot_blocked,AAHA pain management guidelines reference NSAID use.
-class,nsaid,cats,AAFP,Allied caucus,AAFP Practice Guidelines,https://catvets.com/guidelines/practice-guidelines/,verified,American Association of Feline Practitioners.
-class,nsaid,horses,AAEP,Allied caucus,AAEP Guidelines,https://aaep.org/resource/guidelines/,bot_blocked,Equine NSAID use guidance.
-class,analgesic,dogs,AAHA,Allied caucus,AAHA Guidelines (pain management),https://www.aaha.org/resources/guidelines/,bot_blocked,Canine and feline pain management.
-class,analgesic,cats,AAFP,Allied caucus,AAFP Practice Guidelines,https://catvets.com/guidelines/practice-guidelines/,verified,Feline pain management.
-class,anesthetic,dogs,AAHA,Allied caucus,AAHA Anesthesia and Monitoring Guidelines,https://www.aaha.org/resources/guidelines/,bot_blocked,Anesthesia monitoring recommendations.
-class,anesthetic,cats,AAFP,Allied caucus,AAFP Anesthesia Guidelines,https://catvets.com/guidelines/practice-guidelines/,verified,Feline anesthesia guidance.
-class,antiparasitic,,WSAVA,Allied caucus,WSAVA Global Guidelines (parasite control),https://wsava.org/global-guidelines/,verified,WSAVA global parasite control guidelines.
-class,vaccine,,WSAVA,Allied caucus,WSAVA Vaccination Guidelines,https://wsava.org/global-guidelines/,verified,Global vaccination guidelines.
-class,production,,AVMA,AVMA policy,AVMA Policies (full index),https://www.avma.org/resources-tools/avma-policies,bot_blocked,See AVMA policy on production-enhancing agents.
-species,cattle,,AABP,Allied caucus,AABP Guidelines,https://www.aabp.org/Resources/AABP_Guidelines/,bot_blocked,Species-level guideline hub for bovine practice.
-species,horses,,AAEP,Allied caucus,AAEP Guidelines,https://aaep.org/resource/guidelines/,bot_blocked,Species-level guideline hub for equine practice.
-species,swine,,AASV,Allied caucus,AASV Position Statements,https://www.aasv.org/position-statements/,verified,Species-level guideline hub for swine practice.
-species,cats,,AAFP,Allied caucus,AAFP Practice Guidelines,https://catvets.com/guidelines/practice-guidelines/,verified,Species-level guideline hub for feline practice.
-species,dogs,,AAHA,Allied caucus,AAHA Guidelines,https://www.aaha.org/resources/guidelines/,bot_blocked,Species-level guideline hub for canine practice.
+match_type,match_value,species_scope,organization,org_type,title,url,published,expect,link_status,note
+class,antimicrobial,,AVMA,AVMA policy,Judicious Therapeutic Use of Antimicrobials,https://www.avma.org/resources-tools/avma-policies/judicious-therapeutic-use-antimicrobials,,antimicrobial,verified,Umbrella AVMA policy on antimicrobial stewardship.
+class,antimicrobial,,AVMA,AVMA policy,AVMA Policies (full index),https://www.avma.org/resources-tools/avma-policies,,policies,verified,Searchable index of all current AVMA policies.
+class,antimicrobial,cattle,AABP,Allied caucus,AABP Guidelines (prudent antimicrobial use in cattle),https://www.aabp.org/Resources/AABP_Guidelines/,,bovine,blocked,Blocks automated requests; open in a browser to confirm.
+class,antimicrobial,swine,AASV,Allied caucus,AASV Position Statements (antimicrobial judicious use),https://www.aasv.org/position-statements/,,swine,verified,American Association of Swine Veterinarians.
+class,antimicrobial,horses,AAEP,Allied caucus,AAEP Guidelines (antimicrobial stewardship),https://aaep.org/resource/guidelines/,,equine,verified,American Association of Equine Practitioners.
+class,anticonvulsant,,IVETF,Consensus group,IVETF consensus: medical treatment of canine epilepsy (phenobarbital dosing and monitoring),https://pmc.ncbi.nlm.nih.gov/articles/PMC4552098/,2015,epilepsy,verified,Open access. Covers mechanism; pharmacokinetics; dosing; monitoring for each antiepileptic drug.
+class,anticonvulsant,,IVETF,Consensus group,"IVETF consensus: epilepsy definition, classification and terminology",https://pmc.ncbi.nlm.nih.gov/articles/PMC4552272/,2015,epilepsy,verified,Open access. Standard terminology and seizure classification in dogs and cats.
+class,anticonvulsant,,ACVIM,Consensus group,ACVIM Endorsed Statements,https://www.acvim.org/journals-research/research/acvim-endorsed-statements,,consensus,verified,Browse for neurology consensus statements.
+class,cardiac,,ACVIM,Consensus group,ACVIM Endorsed Statements (incl. myxomatous mitral valve disease),https://www.acvim.org/journals-research/research/acvim-endorsed-statements,,consensus,verified,ACVIM consensus on staging and treatment of canine cardiac disease.
+class,endocrine,,ACVIM,Consensus group,ACVIM Endorsed Statements (incl. endocrinology),https://www.acvim.org/journals-research/research/acvim-endorsed-statements,,consensus,verified,Consensus statements on hyperadrenocorticism and related disease.
+class,nsaid,dogs,AAHA,Allied caucus,AAHA Guidelines (pain management),https://www.aaha.org/for-veterinary-professionals/aaha-guidelines/,,guidelines,verified,AAHA pain management guidelines reference NSAID use.
+class,nsaid,cats,AAFP,Allied caucus,AAFP Practice Guidelines,https://catvets.com/clinical-resources/practice-guidelines/,,feline,verified,American Association of Feline Practitioners.
+class,nsaid,horses,AAEP,Allied caucus,AAEP Guidelines,https://aaep.org/resource/guidelines/,,equine,verified,Equine NSAID use guidance.
+class,analgesic,dogs,AAHA,Allied caucus,AAHA Guidelines (pain management),https://www.aaha.org/for-veterinary-professionals/aaha-guidelines/,,guidelines,verified,Canine pain management.
+class,analgesic,cats,AAFP,Allied caucus,AAFP Practice Guidelines,https://catvets.com/clinical-resources/practice-guidelines/,,feline,verified,Feline pain management.
+class,anesthetic,dogs,AAHA,Allied caucus,AAHA Anesthesia and Monitoring Guidelines,https://www.aaha.org/for-veterinary-professionals/aaha-guidelines/,,guidelines,verified,Anesthesia monitoring recommendations.
+class,anesthetic,cats,AAFP,Allied caucus,AAFP Anesthesia Guidelines,https://catvets.com/clinical-resources/practice-guidelines/,,feline,verified,Feline anesthesia guidance.
+class,antiparasitic,,WSAVA,Allied caucus,WSAVA Global Guidelines (parasite control),https://wsava.org/global-guidelines/,,guidelines,verified,WSAVA global parasite control guidelines.
+class,vaccine,,WSAVA,Allied caucus,WSAVA Vaccination Guidelines,https://wsava.org/global-guidelines/,,guidelines,verified,Global vaccination guidelines.
+class,production,,AVMA,AVMA policy,AVMA Policies (full index),https://www.avma.org/resources-tools/avma-policies,,policies,verified,See AVMA policy on production-enhancing agents.
+species,cattle,,AABP,Allied caucus,AABP Guidelines,https://www.aabp.org/Resources/AABP_Guidelines/,,bovine,blocked,Species-level guideline hub for bovine practice.
+species,horses,,AAEP,Allied caucus,AAEP Guidelines,https://aaep.org/resource/guidelines/,,equine,verified,Species-level guideline hub for equine practice.
+species,swine,,AASV,Allied caucus,AASV Position Statements,https://www.aasv.org/position-statements/,,swine,verified,Species-level guideline hub for swine practice.
+species,cats,,AAFP,Allied caucus,AAFP Practice Guidelines,https://catvets.com/clinical-resources/practice-guidelines/,,feline,verified,Species-level guideline hub for feline practice.
+species,dogs,,AAHA,Allied caucus,AAHA Guidelines,https://www.aaha.org/for-veterinary-professionals/aaha-guidelines/,,guidelines,verified,Species-level guideline hub for canine practice.

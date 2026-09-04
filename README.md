@@ -126,13 +126,45 @@ schtasks /Delete /TN "GreenBook Monthly Update" /F
 The wrapper hard-codes the R path (`R-4.5.2`). Update it after an R upgrade or
 the task will fail — it logs the reason rather than failing silently.
 
-### Trade names that disagree with FDA's classification
+### FDA's application type is wrong for 4 conditional approvals
 
-A conditionally approved product must carry a `-CA1` suffix, but the suffix
-often outlives the conditional approval. FDA currently lists **CANALEVIA-CA1**,
-**Varenzin-CA1**, **Credelio Quattro-CA1** and **Baytril 100-CA1** as full
-NADA approvals despite the suffix. The app shows a banner on those products
-saying so, because reading the name alone would give the wrong answer.
+**FDA's `applicationType` field cannot be trusted to identify conditional
+approvals.** It reports 7 of the 11 conditional approvals in the catalogue.
+These four are typed `N` (full NADA) but are conditionally approved:
+
+| Product | Application | FDA type | Confirmed by |
+| --- | --- | --- | --- |
+| CANALEVIA-CA1 | 141-552 | `N` | DailyMed: "Marketing Status: Conditional New Animal Drug Application" |
+| Varenzin-CA1 | 141-571 | `N` | FDA's own indication text: "Conditionally approved for the control of nonregenerative anemia..." |
+| Credelio Quattro-CA1 | 141-619 | `N` | DailyMed: "conditionally approved by FDA pending a full demonstration of effectiveness under application number 141-619" |
+| Baytril 100-CA1 | 141-527 | `N` | FDA's own indication text (product is voluntarily withdrawn) |
+
+This matters clinically: conditional approval means effectiveness has **not**
+been fully demonstrated, so presenting one as a full approval misleads the
+prescriber.
+
+`detect_conditional()` in `R/02_tidy_greenbook.R` therefore unions three
+signals rather than trusting the type field:
+
+1. the mandatory `-CA1` suffix in the proprietary name (catches all 11),
+2. "conditionally approved" appearing in FDA's own indication or limitation
+   text,
+3. `applicationType == "C"`.
+
+Where signal 3 disagrees with the others, `applications$fdaTypeDisagrees` is
+set and the drug page states plainly that FDA's own database types the
+application incorrectly.
+
+Note that a search for `CA1` also returns `Tetroxy HCA-1400` and
+`Tetroxy HCA-1772`. Those are correctly classified ANADA generics; they match
+only because "HCA-1400" contains the letters `ca1`.
+
+### Comparison operators in dose text
+
+ADAFDA stores `≤` and `≥` as the literal strings `lessThanEqualTo` and
+`greaterThanEqualTo`, and its own front end converts them back before display.
+The pipeline does the same in `decode_fda_signs()`. Without it a dose read
+"for dogs weighing lessThanEqualTo 140 pounds" — affecting 7 products.
 
 ## Publishing as a website
 
@@ -208,10 +240,44 @@ labels textually; when it cannot attribute them confidently it shows all
 labelled doses and says so, rather than hiding doses it is unsure about.
 
 **Guideline links are curated, not exhaustive.** `data/reference/guidelines.csv`
-is a starter map of drug class and species to publishing organisation. It is a
-plain CSV — add rows to extend it. The `link_status` column records whether a
-URL was verified programmatically; several organisations block automated
-requests, so `bot_blocked` means "not machine-verified", not "broken".
+is a map of drug class and species to publishing organisation. It is a plain
+CSV — add rows to extend it.
+
+Links are checked **by content, not status code**. `scripts/check_guideline_links.R`
+fetches each URL and requires the string in the `expect` column to appear on
+the page. This matters: `ivetf.org` returned HTTP 200 while actually
+redirecting to a parked domain (`ww547.ivetf.org`) with nothing to do with the
+International Veterinary Epilepsy Task Force. A status-code check called that
+link healthy and shipped a dead reference to a clinician. The IVETF entries
+now point at the open-access consensus papers themselves.
+
+```bash
+Rscript scripts/check_guideline_links.R
+```
+
+Verdicts are `verified` (expected text found), `blocked` (403 — the site
+refuses automated requests; not the same as broken), or `CONTENT MISMATCH`
+(the page loads but is not what it should be — what a parked domain looks
+like). The check runs monthly in CI and never fails the build.
+
+### Guideline age limit
+
+**A linked paper or guideline must not be more than 15 years old.** Clinical
+recommendations go stale, and an out-of-date consensus statement is worse than
+no link because it carries the issuing body's authority without its current
+position.
+
+This is enforced in `app/global.R` at load time (`GUIDELINE_MAX_AGE_YEARS`),
+not by an annual clean-up — a rule that depends on someone remembering to run
+something once a year is a rule that eventually lapses. The cutoff advances on
+its own each January, and expired rows are dropped with a warning naming them.
+
+Set the `published` column to the publication year for a dated paper. Leave it
+blank for an organisation hub (AVMA's policy index, AAHA's guidelines page):
+those are continuously revised, carry no single publication date, and are
+never expired by age. The monthly link check reports anything expiring within
+three years, so it can be replaced with a newer edition rather than silently
+vanishing.
 
 ## Licensing and content
 
