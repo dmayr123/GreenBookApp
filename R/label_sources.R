@@ -24,6 +24,7 @@ library(dplyr)
 library(stringr)
 library(tibble)
 library(tidyr)
+library(readr)
 
 # -- tier 1: manufacturer websites -------------------------------------------
 
@@ -97,14 +98,41 @@ build_label_links <- function(products, applications, documents, ndc) {
   prod <- products |>
     select(proprietaryNameId, applicationId, proprietaryName)
 
-  # -- tier 1: manufacturer ---------------------------------------------------
+  # -- tier 1: the manufacturer's own page for THIS product --------------------
+  #
+  # Resolved from manufacturer sitemaps and verified page by page
+  # (scripts/build_manufacturer_links.R). Only some manufacturers publish
+  # discoverable product pages, so this covers a minority of products; the
+  # rest fall through to the catalogue below, which is honest about being a
+  # starting point rather than a link to the product itself.
+  pages_file <- file.path("data", "reference", "manufacturer_product_pages.csv")
+  product_pages <- if (file.exists(pages_file)) {
+    readr::read_csv(pages_file, show_col_types = FALSE)
+  } else {
+    tibble(proprietaryNameId = integer(), manufacturer = character(),
+           url = character())
+  }
+
+  man_page <- prod |>
+    inner_join(product_pages |> select(proprietaryNameId, manufacturer, url),
+               by = "proprietaryNameId") |>
+    transmute(
+      proprietaryNameId, tier = 1L,
+      sourceName = paste0(manufacturer, " — product page"),
+      citation   = paste0(manufacturer, " (manufacturer)"),
+      whatItIs   = "The manufacturer's own page for this product, with its label and prescribing information",
+      url, link_status = "verified"
+    )
+
+  # -- tier 1b: manufacturer catalogue, when no product page was found ---------
   man <- prod |>
+    anti_join(man_page, by = "proprietaryNameId") |>
     inner_join(match_manufacturer(applications), by = "applicationId") |>
     transmute(
       proprietaryNameId, tier = 1L,
       sourceName = manufacturer,
       citation   = paste0(manufacturer, " (manufacturer)"),
-      whatItIs   = "Manufacturer's product catalogue — open this product's page for its label",
+      whatItIs   = "Manufacturer's product catalogue — this manufacturer does not publish a direct link to each product",
       url, link_status
     )
 
@@ -186,7 +214,7 @@ build_label_links <- function(products, applications, documents, ndc) {
       link_status = "verified"
     )
 
-  bind_rows(man, dm_exact, fda_lbl, bbl, foi, dm_search) |>
+  bind_rows(man_page, man, dm_exact, fda_lbl, bbl, foi, dm_search) |>
     arrange(proprietaryNameId, tier, sourceName) |>
     distinct(proprietaryNameId, url, .keep_all = TRUE)
 }
