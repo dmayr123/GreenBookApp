@@ -55,6 +55,25 @@ if (length(missing)) {
        "\nRun:  Rscript R/01_fetch_adafda.R  then  Rscript R/02_tidy_greenbook.R")
 }
 
+# What changed at FDA in each monthly refresh: new approvals, type or status
+# changes, withdrawals, and conditional approvals converting to full approval.
+# Drug changes only — guideline link and age checks are a maintenance concern
+# and stay in the build logs.
+UPDATE_LOG <- read_table("update_log") %||%
+  tibble(runDate = as.Date(character()), kind = character(),
+         applicationNumber = integer(), proprietaryName = character(),
+         applicationType = character(), sponsorName = character())
+
+UPDATE_RUNS <- read_table("update_runs") %||%
+  tibble(runDate = as.Date(character()), nAdded = integer(),
+         nChanged = integer(), nWithdrawn = integer(), nConverted = integer())
+
+#' The most recent refresh, or NULL before one has run.
+latest_run <- function() {
+  if (nrow(UPDATE_RUNS) == 0) return(NULL)
+  UPDATE_RUNS |> arrange(desc(runDate)) |> slice(1)
+}
+
 # Ingredient -> pharmacologic class, precomputed by the pipeline. Classifying
 # on demand meant running ~60 regexes every time a drug page opened.
 INGREDIENT_CLASSES <- read_table("ingredient_classes") %||%

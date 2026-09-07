@@ -55,6 +55,27 @@ body { background:#f6f8f9; }
   font-weight:700; padding:.22rem .55rem; border-radius:999px; }
 
 .muted { color:#8a969d; font-style:italic; }
+.update-line { display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap;
+  margin-top:1rem; font-size:.9rem; color:#5a6b74; }
+.update-line .update-dot { width:.5rem; height:.5rem; border-radius:50%;
+  background:#c3ccd1; flex:0 0 auto; align-self:center; }
+.update-line.has-changes { color:var(--gb-ink); }
+.update-line.has-changes .update-dot { background:var(--gb-accent); }
+.update-line strong { color:var(--gb-ink); }
+.update-tbl { width:100%; border-collapse:collapse; font-size:.88rem; }
+.update-tbl th { text-align:left; font-size:.7rem; text-transform:uppercase;
+  letter-spacing:.08em; color:#7b8b94; padding:0 .8rem .4rem 0;
+  border-bottom:1.5px solid var(--gb-line); }
+.update-tbl td { padding:.45rem .8rem .45rem 0;
+  border-bottom:1px solid var(--gb-line); vertical-align:top; }
+.update-tbl td:first-child { font-weight:600; }
+.kind-tag { display:inline-block; font-size:.68rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.05em; padding:.14rem .45rem;
+  border-radius:999px; white-space:nowrap; }
+.kind-conv { background:#fdf0dc; color:#8a5310; }
+.kind-new  { background:#e4f1ec; color:#0b6b5e; }
+.kind-chg  { background:#e7eef7; color:#23558c; }
+.kind-wd   { background:#fbe6e6; color:#8f2626; }
 /* The product name in a result row: a real button, styled as the heading it
    reads as. Focus is visible because a keyboard user needs to see where they
    are, which is the whole point of making it focusable. */
@@ -130,6 +151,40 @@ ui <- page_fluid(
 
 # -- home --------------------------------------------------------------------
 
+#' The "what changed" line under the title.
+#'
+#' Shows the headline counts from the most recent refresh and opens the full
+#' report. A quiet month still says so with its date, because "checked on the
+#' 6th, nothing changed" is information -- silence would be indistinguishable
+#' from the update having stopped running.
+update_banner <- function() {
+  run <- latest_run()
+  if (is.null(run)) return(NULL)
+
+  total <- run$nAdded + run$nChanged + run$nWithdrawn + run$nConverted
+  when <- format(run$runDate, "%d %B %Y")
+
+  bits <- c(
+    if (run$nConverted > 0) sprintf("%d conditional → full approval", run$nConverted),
+    if (run$nAdded > 0)     sprintf("%d new", run$nAdded),
+    if (run$nChanged > 0)   sprintf("%d status change%s", run$nChanged,
+                                    if (run$nChanged == 1) "" else "s"),
+    if (run$nWithdrawn > 0) sprintf("%d withdrawn", run$nWithdrawn)
+  )
+
+  div(class = if (total > 0) "update-line has-changes" else "update-line",
+    span(class = "update-dot"),
+    if (total > 0) {
+      tagList(strong(sprintf("Monthly update, %s: ", when)),
+              paste(bits, collapse = " · "), " ",
+              actionLink("show_update", "See the report"))
+    } else {
+      tagList(sprintf("Checked %s — no drug changes this month. ", when),
+              actionLink("show_update", "See update history"))
+    }
+  )
+}
+
 home_ui <- function() {
   tagList(
     div(class = "gb-hero",
@@ -139,7 +194,10 @@ home_ui <- function() {
       # -- something no periodic copy of an external database can guarantee,
       # and not a claim worth defending on a clinical tool.
       p(class = "gb-sub",
-        "Search for drugs by species, or search directly.")
+        "Search for drugs by species, or search directly."),
+      # Sits under the title and above the search box, so the month's changes
+      # are the first thing offered rather than something to go looking for.
+      update_banner()
     ),
     card(
       card_body(
@@ -286,6 +344,75 @@ server <- function(input, output, session) {
     session$onFlushed(function() {
       updateTextInput(session, "query", value = q)
     }, once = TRUE)
+  })
+
+  # -- monthly update report -------------------------------------------------
+
+  kind_tag <- function(kind) {
+    cls <- case_when(
+      str_detect(kind, "full approval")  ~ "kind-conv",
+      str_detect(kind, "New")            ~ "kind-new",
+      str_detect(kind, "withdrawn")      ~ "kind-wd",
+      TRUE                               ~ "kind-chg")
+    sprintf('<span class="kind-tag %s">%s</span>', cls, kind)
+  }
+
+  observeEvent(input$show_update, {
+    run <- latest_run()
+    latest <- if (is.null(run)) UPDATE_LOG[0, ] else
+      UPDATE_LOG |> filter(runDate == run$runDate)
+
+    body <- if (nrow(latest) == 0) {
+      tagList(
+        p(if (is.null(run)) "No refresh has run yet."
+          else sprintf("Checked %s. FDA published no changes to drug approvals, statuses or withdrawals since the previous check.",
+                       format(run$runDate, "%d %B %Y"))),
+        p(class = "text-muted small",
+          "This report covers drug changes only.")
+      )
+    } else {
+      tagList(
+        p(class = "text-muted small",
+          sprintf("Changes FDA published between the previous check and %s.",
+                  format(run$runDate, "%d %B %Y"))),
+        div(style = "overflow-x:auto",
+          tags$table(class = "update-tbl",
+            tags$thead(tags$tr(
+              tags$th("Product"), tags$th("Change"),
+              tags$th("Application"), tags$th("Sponsor"))),
+            tags$tbody(map(seq_len(nrow(latest)), function(i) {
+              tags$tr(
+                tags$td(latest$proprietaryName[i]),
+                tags$td(HTML(kind_tag(latest$kind[i]))),
+                tags$td(latest$applicationNumber[i]),
+                tags$td(latest$sponsorName[i]))
+            }))
+          ))
+      )
+    }
+
+    # Earlier months, so a missed report is still reachable.
+    history <- if (nrow(UPDATE_RUNS) > 1) {
+      tagList(
+        hr(),
+        div(class = "field-label", "Previous checks"),
+        div(class = "text-muted small",
+          map(seq_len(min(nrow(UPDATE_RUNS), 12))[-1], function(i) {
+            r <- UPDATE_RUNS[i, ]
+            n <- r$nAdded + r$nChanged + r$nWithdrawn + r$nConverted
+            div(sprintf("%s — %s", format(r$runDate, "%d %b %Y"),
+                        if (n == 0) "no changes" else sprintf("%d change%s", n,
+                          if (n == 1) "" else "s")))
+          }))
+      )
+    } else NULL
+
+    showModal(modalDialog(
+      title = "Monthly drug update",
+      size = "l", easyClose = TRUE,
+      footer = modalButton("Close"),
+      body, history
+    ))
   })
 
   observeEvent(input$back_home,    { view("home") })

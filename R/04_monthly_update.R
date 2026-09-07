@@ -21,10 +21,14 @@ library(stringr)
 library(fs)
 library(readr)
 library(glue)
+library(tibble)
 
 source("R/01_fetch_adafda.R")
 
 CHANGELOG <- path("data", "changelog")
+# Defined here rather than borrowed from 02_tidy_greenbook.R, which is only
+# sourced later in the run.
+proc_dir  <- function(...) path("data", "processed", ...)
 
 #' Compare the freshly fetched catalogue against the one already on disk.
 compare_catalogues <- function(old_path, new_json) {
@@ -75,6 +79,93 @@ compare_catalogues <- function(old_path, new_json) {
     refetch = unique(c(added$applicationId, changed$applicationId,
                        withdrawn$applicationId))
   )
+}
+
+#' Structured record of one month's changes, for the app to render.
+#'
+#' The markdown changelog is for a person reading the repository; this is the
+#' same information as data, so the landing page can show what changed without
+#' parsing prose. History accumulates and is capped, because the app ships
+#' this file to every visitor.
+write_update_log <- function(diff, keep_months = 24) {
+  f <- proc_dir("update_log.rds")
+  stamp <- Sys.Date()
+
+  row_of <- function(df, kind) {
+    if (nrow(df) == 0) return(NULL)
+    tibble(
+      runDate = stamp, kind = kind,
+      applicationNumber = as.integer(df$applicationNumber),
+      proprietaryName = str_squish(coalesce(df$proprietaryName, "")),
+      applicationType = coalesce(df$applicationType, NA_character_),
+      sponsorName = str_squish(coalesce(df$sponsorName, ""))
+    )
+  }
+
+  conversions <- if (all(c("applicationType_old", "applicationType") %in%
+                         names(diff$changed))) {
+    diff$changed |> filter(applicationType_old == "C", applicationType == "N")
+  } else diff$changed[0, ]
+
+  # Conversions are reported on their own and removed from the generic
+  # "changed" bucket, so a CNADA becoming a full NADA is not buried among
+  # routine status edits -- it is the change vets most need to see.
+  # A withdrawal is also a status change, and a conversion is also a type
+  # change. Reporting either twice makes a small month look busier than it was
+  # and buries the specific line that matters, so each application is listed
+  # once under its most specific heading.
+  changed_other <- diff$changed
+  if (nrow(changed_other)) {
+    already <- c(conversions$applicationNumber, diff$withdrawn$applicationNumber)
+    changed_other <- changed_other |> filter(!applicationNumber %in% already)
+  }
+
+  # Bind onto a typed empty frame so the columns exist even in a month with no
+  # changes at all. bind_rows() of nothing but NULLs returns a frame with zero
+  # *columns*, not an empty typed one, and the filter below then fails on a
+  # missing runDate -- the same trap that broke the first-ever run.
+  empty <- tibble(
+    runDate = as.Date(character()), kind = character(),
+    applicationNumber = integer(), proprietaryName = character(),
+    applicationType = character(), sponsorName = character())
+
+  new_rows <- bind_rows(
+    empty,
+    row_of(conversions,     "Conditional approval became full approval"),
+    row_of(diff$added,      "New application"),
+    row_of(changed_other,   "Type or status changed"),
+    row_of(diff$withdrawn,  "Voluntarily withdrawn")
+  )
+
+  prev <- if (file_exists(f)) readRDS(f) else empty
+  # A re-run on the same day replaces that day's rows rather than duplicating.
+  prev <- prev |> filter(runDate != stamp)
+
+  out <- bind_rows(prev, new_rows) |>
+    filter(runDate >= stamp - keep_months * 31) |>
+    arrange(desc(runDate), kind, applicationNumber)
+
+  dir_create(proc_dir())
+  saveRDS(out, f, compress = "xz")
+
+  # Every run is recorded, including quiet ones, so the app can say "checked
+  # on this date, nothing changed" rather than showing a stale month.
+  rf <- proc_dir("update_runs.rds")
+  runs <- if (file_exists(rf)) readRDS(rf) else
+    tibble(runDate = as.Date(character()), nAdded = integer(),
+           nChanged = integer(), nWithdrawn = integer(), nConverted = integer())
+  runs <- runs |>
+    filter(runDate != stamp) |>
+    bind_rows(tibble(runDate = stamp, nAdded = nrow(diff$added),
+                     nChanged = nrow(changed_other),
+                     nWithdrawn = nrow(diff$withdrawn),
+                     nConverted = nrow(conversions))) |>
+    arrange(desc(runDate)) |>
+    head(keep_months)
+  saveRDS(runs, rf, compress = "xz")
+
+  message(sprintf("Update log -> %s (%d rows this run)", f, nrow(new_rows)))
+  invisible(out)
 }
 
 #' Human-readable summary of one month's changes.
@@ -149,6 +240,7 @@ run_monthly_update <- function() {
                "withdrawn: {nrow(diff$withdrawn)}"))
 
   write_changelog(diff)
+  write_update_log(diff)
 
   if (length(diff$refetch)) {
     message(glue("Re-fetching {length(diff$refetch)} detail records ..."))

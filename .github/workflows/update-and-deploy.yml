@@ -33,6 +33,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write        # the monthly report is filed as an issue; see below
 
 # Never let two deploys race; let a newer run supersede a queued one.
 concurrency:
@@ -99,6 +100,45 @@ jobs:
           else
             echo "No changelog produced." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Notification by GitHub Issue rather than SMTP. GitHub emails the
+      # repository owner when an issue is opened, so this needs no mail server
+      # and no stored password -- the built-in token is enough. It also leaves
+      # a permanent, linkable record of each month's changes.
+      #
+      # Filed only when FDA actually changed something. A monthly "nothing
+      # happened" email is the fastest way to train someone to ignore the one
+      # that matters; a quiet month is still recorded in the app and in the
+      # build summary.
+      - name: File the monthly drug update as an issue
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest=$(ls -1 data/changelog/*.md 2>/dev/null | tail -1)
+          [ -z "$latest" ] && { echo "No changelog produced."; exit 0; }
+
+          # The changelog states its own counts; a run with nothing to report
+          # has zero on all four lines.
+          changed=$(grep -cE '^\- .*: \*\*[1-9]' "$latest" || true)
+          if [ "$changed" -eq 0 ]; then
+            echo "No drug changes this month; not filing an issue."
+            exit 0
+          fi
+
+          title="Green Book update — $(date -u '+%B %Y')"
+
+          # Ensure the label exists before using it: gh fails the whole issue
+          # creation on an unknown label, which would lose the notification
+          # over a cosmetic detail.
+          gh label create "monthly-update" \
+            --description "Automated monthly Green Book drug changes" \
+            --color "0B6B5E" 2>/dev/null || true
+
+          gh issue create --title "$title" --body-file "$latest" \
+              --label "monthly-update" \
+            || gh issue create --title "$title" --body-file "$latest" \
+            || echo "Could not file the issue; the changelog is in the build summary above."
 
       - name: Build the static site
         run: Rscript scripts/build_static_site.R

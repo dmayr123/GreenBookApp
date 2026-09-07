@@ -108,6 +108,31 @@ tables, and writes a dated changelog to `data/changelog/`.
 The changelog calls out conditional approvals that converted to full approval
 (CNADA → NADA), new approvals, and newly withdrawn products.
 
+### How you find out what changed
+
+**In the app.** The landing page carries a line under the title, above the
+search box: the date of the last check and what changed, opening the full
+report. A quiet month still shows its date — "checked on the 6th, nothing
+changed" is information, and silence would be indistinguishable from the
+update having stopped running.
+
+**By email.** The workflow files each month's report as a GitHub issue, and
+GitHub emails the repository owner when an issue is opened. That needs no mail
+server and no stored password — the built-in token is enough — and it leaves a
+permanent, linkable record of every month.
+
+An issue is filed **only when FDA actually changed something**. A monthly
+"nothing happened" email is the fastest way to train someone to ignore the one
+that matters.
+
+Each application appears once, under its most specific heading: a withdrawal
+is also a status change and a conversion is also a type change, so reporting
+both would make a quiet month look busy and bury the line that matters.
+
+This report covers **drug changes only** — new approvals, type and status
+changes, withdrawals, and conditional approvals converting. Guideline link and
+age checks are a maintenance concern and stay in the build summary.
+
 ```bash
 Rscript R/04_monthly_update.R
 ```
