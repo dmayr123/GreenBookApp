@@ -163,6 +163,26 @@ category_class <- function(x) {
 # conditional approvals, and the correction must be applied once, in the
 # pipeline, so the app and any other consumer of the tables agree.
 
+#' Format an application number the way FDA writes it: 141262 -> "141-262".
+#'
+#' Matches the `appNumber` filter in FDA's own front end (zero-pad to six
+#' digits, hyphen after the third), so a number copied from here can be pasted
+#' straight into their search box.
+fda_app_number <- function(n) {
+  n <- suppressWarnings(as.integer(n))
+  if (length(n) == 0 || is.na(n)) return(NA_character_)
+  v <- sprintf("%06d", n)
+  paste0(substr(v, 1, 3), "-", substr(v, 4, 6))
+}
+
+# Animal Drugs @ FDA is a single-page app whose per-drug route
+# (#/previewsearch/{appNum}) only resolves with search state already loaded --
+# opening it directly redirects to the search page. There is therefore no URL
+# that links to one product, and any link claiming to do so is misleading.
+# The app links to the search page and shows the formatted application number
+# to paste, which is the most a link can honestly promise.
+ADAFDA_SEARCH <- "https://animaldrugsatfda.fda.gov/adafda/views/#/search"
+
 #' Render a value, or a muted placeholder when it is missing.
 or_none <- function(x, placeholder = "Not listed") {
   if (is.null(x) || length(x) == 0 || is.na(x[1]) || !nzchar(str_trim(x[1]))) {

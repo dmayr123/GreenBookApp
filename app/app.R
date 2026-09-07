@@ -530,6 +530,25 @@ server <- function(input, output, session) {
     view("detail")
   })
 
+  # Open the pioneer product of the drug currently on screen. Resolved here
+  # from the selection rather than captured at render time, so it cannot go
+  # stale if the user navigates before clicking.
+  observeEvent(input$go_pioneer, {
+    pid <- selected(); req(pid)
+    prod <- PRODUCTS |> filter(proprietaryNameId == pid) |> slice(1)
+    if (nrow(prod) == 0) return()
+    app <- APPLICATIONS |> filter(applicationId == prod$applicationId) |> slice(1)
+    if (nrow(app) == 0 || is.na(app$pioneerApplicationNumber)) return()
+
+    pio <- APPLICATIONS |>
+      filter(applicationNumber == app$pioneerApplicationNumber) |> slice(1)
+    if (nrow(pio) == 0) return()
+    pio_prod <- PRODUCTS |> filter(applicationId == pio$applicationId) |> slice(1)
+    if (nrow(pio_prod) == 0) return()
+
+    selected(pio_prod$proprietaryNameId)
+  })
+
   # -- detail ----------------------------------------------------------------
 
   output$detail <- renderUI({
@@ -770,23 +789,30 @@ server <- function(input, output, session) {
         div(class = "field-label", "Pioneer product"),
         div(class = "field-value",
           if (!is.null(pioneer) && nrow(pioneer) > 0) {
+            # Opens the pioneer inside this app. It used to link out to FDA,
+            # which cannot address a single product, so the link went to a
+            # search page with no mention of the pioneer at all.
+            pio_prod <- PRODUCTS |>
+              filter(applicationId == pioneer$applicationId) |> slice(1)
             tagList(
-              sprintf("This is a generic of application %s. ",
-                      pioneer$applicationNumber),
-              tags$a(href = paste0(
-                "https://animaldrugsatfda.fda.gov/adafda/views/#/search/",
-                pioneer$applicationNumber),
-                target = "_blank", rel = "noopener",
-                "View the pioneer product at FDA")
+              sprintf("Generic of %s (%s). ",
+                      if (nrow(pio_prod)) pio_prod$proprietaryName else "an earlier application",
+                      fda_app_number(pioneer$applicationNumber)),
+              if (nrow(pio_prod))
+                actionLink("go_pioneer",
+                           sprintf("Open %s", pio_prod$proprietaryName))
+              else NULL
             )
           } else span(class = "muted",
                       "This is the pioneer product (no earlier application listed).")
         ),
-        div(class = "field-label", "This record at FDA"),
+        div(class = "field-label", "Look this up at FDA"),
         div(class = "field-value",
-          tags$a(href = "https://animaldrugsatfda.fda.gov/adafda/views/#/search",
-                 target = "_blank", rel = "noopener",
-                 "Animal Drugs @ FDA"))
+          "Animal Drugs @ FDA cannot link to a single product, so search it by ",
+          "application number: ",
+          tags$code(fda_app_number(app$applicationNumber)), " — ",
+          tags$a(href = ADAFDA_SEARCH, target = "_blank", rel = "noopener",
+                 "open Animal Drugs @ FDA"))
       )),
 
       # -- guidelines --------------------------------------------------------
