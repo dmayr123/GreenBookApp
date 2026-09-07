@@ -268,23 +268,25 @@ like). The check runs monthly in CI and never fails the build.
 
 Every product carries a link to its label, resolved in this order:
 
-| Tier | Source | Coverage as the primary link |
+| Tier | Source | Primary link for |
 | --- | --- | --- |
-| 1 | Manufacturer's own website | 2,051 products (71%) |
-| 2 | FDA FOI summary | 188 products |
-| 3 | Other source, cited — DailyMed SPL, Blue Bird label, FDA-hosted labelling | 49 products |
-| 4 | DailyMed search by trade name | 590 products (21%) |
+| 1 | Manufacturer's own website | 2,049 products (71%) |
+| 2 | Structured Product Label — the labeller's full approved label, via DailyMed | 108 products |
+| 3 | Other FDA-published labelling — Blue Bird label, FDA-hosted labelling | 10 products |
+| 4 | FDA FOI summary | 119 products |
+| 5 | DailyMed search by trade name | 590 products (21%) |
 
 All 2,876 products resolve to at least one source. Every source is shown on the
 drug page, not just the winner — a vet who cannot reach the manufacturer's site
 needs the fallbacks visible.
 
-**An FOI summary is not the product label.** It is FDA's freedom-of-information
-summary of the approval. It sits at tier 2 because that is the requested search
-order, but each link states what the document actually is, so an approval
-summary is never mistaken for labelling. The documents that genuinely *are*
-labelling — the Structured Product Label, the Blue Bird label for medicated
-feeds, and FDA-hosted labelling — are cited with their source.
+**Actual labelling is ranked above the FOI summary deliberately.** An FOI
+summary is FDA's freedom-of-information summary of the approval: useful for
+understanding the basis of approval, but not a document to check a dose or a
+withdrawal period against. Ranking it below real labelling means the primary
+link on a drug page is the document a clinician actually needs. It is still
+offered underneath, and every link states what the document is and names its
+source, so nothing is presented as something it is not.
 
 Manufacturer sites are matched from FDA's sponsor name in
 `R/label_sources.R`. Two traps that file has to survive:

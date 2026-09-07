@@ -71,8 +71,9 @@ body { background:#f6f8f9; }
   border-radius:999px; background:#e4f1ec; color:#0b6b5e; margin-left:.4rem;
   vertical-align:2px; }
 .src-badge.tier2 { background:#e7eef7; color:#23558c; }
-.src-badge.tier3 { background:#f2eef7; color:#5a3d8a; }
-.src-badge.tier4 { background:#eceff1; color:#546069; }
+.src-badge.tier3 { background:#e7eef7; color:#23558c; }
+.src-badge.tier4 { background:#f2eef7; color:#5a3d8a; }
+.src-badge.tier5 { background:#eceff1; color:#546069; }
 .what-is { color:#5a6b74; font-size:.83rem; margin-top:.2rem; }
 .cite { color:#7b8b94; font-size:.78rem; }
 .gb-footer { color:#7b8b94; font-size:.82rem; padding:2rem 0 1rem; }
@@ -471,10 +472,10 @@ server <- function(input, output, session) {
           div(class = "label-primary",
             tags$a(href = labels$url[1], target = "_blank", rel = "noopener",
                    labels$sourceName[1]),
-            span(class = paste0("src-badge tier", min(labels$tier[1], 4)),
-                 switch(as.character(min(labels$tier[1], 4)),
-                        "1" = "Manufacturer", "2" = "FDA FOI",
-                        "3" = "Other source", "Search")),
+            span(class = paste0("src-badge tier", min(labels$tier[1], 5)),
+                 switch(as.character(min(labels$tier[1], 5)),
+                        "1" = "Manufacturer", "2" = "Approved label",
+                        "3" = "FDA label",    "4" = "FDA FOI", "Search")),
             div(class = "what-is", labels$whatItIs[1]),
             div(class = "cite", "Source: ", labels$citation[1],
                 if (identical(labels$link_status[1], "blocked"))
