@@ -20,6 +20,8 @@
 library(dplyr)
 library(stringr)
 
+`%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+
 #' Canonical form for matching. Must stay identical to the `norm_text()` used
 #' when the index was built in 02_tidy_greenbook.R, or nothing will match.
 norm_text <- function(x) {
@@ -47,9 +49,12 @@ tokenize_query <- function(query) {
 #' Scoring is deliberately simple and explainable: a vet should be able to see
 #' why a row ranked where it did. Points are additive across tokens.
 score_matches <- function(idx, tokens, full_key = "") {
-  name_key <- norm_text(idx$proprietaryName)
-  ing_key  <- norm_text(idx$ingredients)
-  app_key  <- norm_text(idx$applicationNumber)
+  # These are precomputed columns on the index (02_tidy_greenbook.R). Falling
+  # back to normalising on the fly keeps the function usable against an older
+  # index, but the fast path is the one that runs in the app.
+  name_key <- idx$nameKey %||% norm_text(idx$proprietaryName)
+  ing_key  <- idx$ingKey  %||% norm_text(idx$ingredients)
+  app_key  <- idx$appKey  %||% norm_text(idx$applicationNumber)
 
   score <- numeric(nrow(idx))
 

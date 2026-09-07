@@ -537,8 +537,22 @@ build_all <- function() {
       searchKeyWide = norm_text(paste(
         proprietaryName, ingredients, sponsorName, applicationNumber,
         doseFormName, speciesList, routes, indications, specifications
-      ))
-    )
+      )),
+      # Precomputed so scoring does not normalise the same three columns on
+      # every keystroke. In WebAssembly, where R runs several times slower
+      # than it does here, that work was a measurable part of each search.
+      nameKey = norm_text(proprietaryName),
+      ingKey  = norm_text(ingredients),
+      appKey  = norm_text(applicationNumber)
+    ) |>
+    # The index is downloaded and held in memory by every visitor, so it
+    # carries only what the results table and the search actually read.
+    # Keeping the join's other 21 columns cost 1.9 MB of 4.2 MB for data
+    # nothing displays -- the detail page reads those from their own tables.
+    select(proprietaryNameId, proprietaryName, ingredients, category,
+           marketStatus, sponsorName, doseFormName, speciesList,
+           applicationNumber, speciesGroups,
+           searchKey, searchKeyWide, nameKey, ingKey, appKey)
 
   # Product label links, ranked manufacturer -> FOI -> other cited source.
   # NDC carries the DailyMed setid, so it is read back if 03 has already run;
@@ -552,6 +566,9 @@ build_all <- function() {
   label_links <- build_label_links(products, applications, documents, ndc_tbl)
 
   dir_create(proc_dir())
+  # Precomputed once here rather than re-running ~60 regexes on every drug
+  # page open, which cost ~30 ms locally and several times that in the browser.
+  write_table(ingredient_classes, "ingredient_classes")
   write_table(label_links,   "label_links")
   write_table(applications,  "applications")
   write_table(products,      "products")

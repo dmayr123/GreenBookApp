@@ -55,6 +55,11 @@ if (length(missing)) {
        "\nRun:  Rscript R/01_fetch_adafda.R  then  Rscript R/02_tidy_greenbook.R")
 }
 
+# Ingredient -> pharmacologic class, precomputed by the pipeline. Classifying
+# on demand meant running ~60 regexes every time a drug page opened.
+INGREDIENT_CLASSES <- read_table("ingredient_classes") %||%
+  tibble(activeIngredientName = character(), drugClass = character())
+
 LABEL_LINKS  <- read_table("label_links") %||%
   tibble(proprietaryNameId = integer(), tier = integer(), sourceName = character(),
          citation = character(), whatItIs = character(), url = character(),

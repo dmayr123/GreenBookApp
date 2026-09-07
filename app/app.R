@@ -94,7 +94,37 @@ body { background:#f6f8f9; }
 
 ui <- page_fluid(
   theme = bs_theme(version = 5, primary = "#0b6b5e", base_font = font_google("Inter")),
-  tags$head(tags$style(HTML(app_css)), tags$title("Green Book Drug Finder")),
+  tags$head(
+    tags$style(HTML(app_css)),
+    tags$title("Green Book Drug Finder"),
+    # Enter must run the search. A Shiny textInput is not inside a form, so it
+    # does nothing on Enter unless wired up -- and typing a drug name then
+    # pressing Enter is what everyone does first.
+    #
+    # Bound on `document` rather than on the input, because the pages are
+    # rendered by renderUI and the box does not exist when this script runs.
+    tags$script(HTML("
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        var t = e.target;
+        if (!t || !t.id) return;
+        if (t.id === 'home_query') {
+          e.preventDefault();
+          // Flush the typed value to the server before the button event, so a
+          // fast typist who hits Enter on the last character still searches
+          // for what they typed rather than for one character less.
+          if (window.jQuery) jQuery(t).trigger('change');
+          var btn = document.getElementById('home_go');
+          if (btn) btn.click();
+        } else if (t.id === 'query') {
+          // Results already filter as you type; stop Enter doing anything odd
+          // and drop focus so the keyboard closes on a phone.
+          e.preventDefault();
+          t.blur();
+        }
+      });
+    "))
+  ),
   uiOutput("page")
 )
 
@@ -279,10 +309,17 @@ server <- function(input, output, session) {
 
   # -- results ---------------------------------------------------------------
 
+  # The results list filters as you type. Without a pause, every keystroke ran
+  # a full search and re-rendered the table -- 300 ms of work to type one word
+  # here, and several times that in the browser build, where R runs
+  # interpreted WebAssembly. 250 ms is below the point a pause is noticeable
+  # but long enough that a typed word costs one search instead of nine.
+  query_d <- debounce(reactive(input$query %||% ""), 250)
+
   hits <- reactive({
     search_drugs(
       SEARCH_INDEX,
-      query             = input$query %||% "",
+      query             = query_d(),
       deep              = isTRUE(input$deep),
       species_group     = species(),
       categories        = input$cats,
@@ -292,7 +329,9 @@ server <- function(input, output, session) {
 
   output$result_count <- renderText({
     n <- nrow(hits())
-    q <- str_trim(input$query %||% "")
+    # The debounced value, so the count and the table always describe the
+    # same query rather than the caption running a keystroke ahead.
+    q <- str_trim(query_d())
     sprintf("%s product%s%s", format(n, big.mark = ","),
             if (n == 1) "" else "s",
             if (nzchar(q)) paste0(" matching \"", q, "\"") else "")
@@ -412,8 +451,11 @@ server <- function(input, output, session) {
       APPLICATIONS |> filter(applicationNumber == app$pioneerApplicationNumber) |> slice(1)
     } else NULL
 
+    # Looked up rather than recomputed; see INGREDIENT_CLASSES in global.R.
     classes <- if (nrow(ings)) {
-      classify_ingredients(ings$activeIngredientName)$drugClass |> unique()
+      INGREDIENT_CLASSES |>
+        filter(activeIngredientName %in% ings$activeIngredientName) |>
+        pull(drugClass) |> unique()
     } else character()
     guides <- match_guidelines(GUIDELINES, classes, unique(sp$speciesGroup))
 
