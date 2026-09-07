@@ -87,7 +87,26 @@ compare_catalogues <- function(old_path, new_json) {
 #' same information as data, so the landing page can show what changed without
 #' parsing prose. History accumulates and is capped, because the app ships
 #' this file to every visitor.
-write_update_log <- function(diff, keep_months = 24) {
+write_update_log <- function(diff, keep_months = 24, verified = FALSE) {
+  # Hard refusal unless the caller is the real monthly run.
+  #
+  # This exists because a test that simulated a month of changes wrote its
+  # invented rows straight into data/processed, and the app then displayed
+  # them as fact -- reporting a conditional approval as converted and a
+  # marketed product as withdrawn. On a clinical tool that is the most
+  # dangerous class of bug there is: confidently wrong drug status.
+  #
+  # run_monthly_update() passes verified = TRUE after diffing the catalogue it
+  # actually fetched from FDA. Nothing else can write this file, so a
+  # simulation can no longer reach the app no matter how it is invoked.
+  if (!isTRUE(verified)) {
+    warning("write_update_log(): refusing to write. Only run_monthly_update() ",
+            "may write the update log, because it is the only caller that has ",
+            "diffed a catalogue actually fetched from FDA. Simulated or test ",
+            "diffs must never reach data/processed.")
+    return(invisible(NULL))
+  }
+
   f <- proc_dir("update_log.rds")
   stamp <- Sys.Date()
 
@@ -240,7 +259,8 @@ run_monthly_update <- function() {
                "withdrawn: {nrow(diff$withdrawn)}"))
 
   write_changelog(diff)
-  write_update_log(diff)
+  # verified = TRUE: `diff` came from the catalogue fetched above, not a fixture.
+  write_update_log(diff, verified = TRUE)
 
   if (length(diff$refetch)) {
     message(glue("Re-fetching {length(diff$refetch)} detail records ..."))
