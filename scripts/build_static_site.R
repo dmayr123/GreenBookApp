@@ -111,6 +111,49 @@ shell <- readLines(path(SITE, "index.html"), warn = FALSE)
 shell <- sub("<title>Shiny App</title>",
              "<title>Green Book Drug Finder</title>", shell, fixed = TRUE)
 
+# A bookmark takes its name from <title> and its icon from the favicon.
+# shinylive ships neither, so a saved link would sit in the bookmarks bar as a
+# blank page icon -- the thing that makes a bookmark hard to find again. The
+# capsule mark is drawn as SVG rather than shipped as a bitmap so it stays
+# sharp at every size, with a manifest so an "Add to Home Screen" on a phone
+# gets a sensible short name instead of the URL.
+writeLines(c(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
+  '  <rect width="64" height="64" rx="14" fill="#0b6b5e"/>',
+  '  <g transform="rotate(-45 32 32)">',
+  '    <rect x="17" y="24" width="30" height="16" rx="8" fill="#ffffff"/>',
+  '    <path d="M32 24h7a8 8 0 0 1 8 8 8 8 0 0 1-8 8h-7z" fill="#7fd4bd"/>',
+  '  </g>',
+  '</svg>'
+), path(SITE, "favicon.svg"))
+
+writeLines(c(
+  '{',
+  '  "name": "Green Book Drug Finder",',
+  '  "short_name": "Green Book",',
+  '  "description": "FDA-approved animal drug products, searchable by species.",',
+  '  "start_url": "./",',
+  '  "display": "standalone",',
+  '  "background_color": "#f6f8f9",',
+  '  "theme_color": "#0b6b5e",',
+  '  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]',
+  '}'
+), path(SITE, "manifest.webmanifest"))
+
+shell <- sub(
+  "</head>",
+  paste0(
+    '  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />\n',
+    '  <link rel="apple-touch-icon" href="./favicon.svg" />\n',
+    '  <link rel="manifest" href="./manifest.webmanifest" />\n',
+    '  <meta name="theme-color" content="#0b6b5e" />\n',
+    '  <meta name="apple-mobile-web-app-title" content="Green Book" />\n',
+    '  <meta name="description" content="FDA-approved animal drug products, ',
+    'searchable by species. Not a substitute for the approved label or for ',
+    'Animal Drugs @ FDA." />\n',
+    '</head>'),
+  shell, fixed = TRUE)
+
 LOADING_HTML <- '
 <style>
   #gb-loading {
