@@ -204,11 +204,24 @@ If you add a package to the app, check what it drags into the bundle:
 ls docs/shinylive/webr/packages/
 ```
 
+The build also customises the page shell shinylive emits, which by default is
+titled "Shiny App" and shows no explanation of the wait. It sets the real
+title and adds a first-load notice telling the visitor the app is downloading
+R and roughly how long that takes. The notice hides itself once the app's
+landing page is on screen, and carries a dismiss link and a hard timeout so it
+can never sit over a working app.
+
+The `/edit/` entry point shinylive ships — a live code editor over the app
+source — is deleted. Nothing done there could change the deployed site, but
+this is a clinical reference and an editable view invites someone to alter a
+dose and screenshot the result as though it came from the published tool.
+
 ### Trade-offs of the static build
 
 - **First visit is slow.** The browser downloads the R runtime and packages
   (tens of MB) before the app starts. It is cached afterwards, so repeat
-  visits are fast — but a vet opening it once on clinic wifi will wait.
+  visits are fast — but a vet opening it once on clinic wifi will wait. The
+  first-load notice above exists so that wait does not look like a broken page.
 - **No server means no server costs, and no usage limits.**
 - All data is public FDA data, so shipping it to the browser is fine.
 
@@ -336,7 +349,12 @@ design — the app shows FDA-labelled use only, and says so on every drug page.
 
 ## Clinical disclaimer
 
-This tool reformats FDA's published data. It is not a substitute for reading
-the approved label, and it does not provide extra-label dosing. Any use
-outside the labelled species, dose, route or indication is extra-label and is
-the prescriber's professional responsibility under AMDUCA.
+**This tool is not a substitute for the approved product label, nor for
+[Animal Drugs @ FDA][adafda], which remains the authoritative source.** It
+reformats a periodic extract of FDA's published data and may lag the current
+FDA record.
+
+It does not provide extra-label dosing. Any use outside the labelled species,
+dose, route or indication is extra-label and is the prescriber's professional
+responsibility under AMDUCA. Verify against the current approved label and
+against Animal Drugs @ FDA before making a prescribing decision.

@@ -131,6 +131,17 @@ home_ui <- function() {
         })
       )
     ),
+    # Stated on the landing page as well as on each drug page, because a
+    # visitor who searches once may never scroll far enough to see it there.
+    div(class = "disclaimer mt-4",
+      strong("Not a substitute for the approved product label or for "),
+      strong("Animal Drugs @ FDA. "),
+      "This tool reformats a periodic extract of FDA's published data and may ",
+      "lag the current FDA record. It shows FDA-labelled use only. Verify ",
+      "against the current approved label and against ",
+      tags$a(href = "https://animaldrugsatfda.fda.gov/adafda/views/#/search",
+             target = "_blank", rel = "noopener", "Animal Drugs @ FDA"),
+      " before prescribing."),
     div(class = "gb-footer",
       sprintf("Data from Animal Drugs @ FDA, built %s. ", DATA_BUILT),
       sprintf("%s applications, %s products.",
@@ -516,7 +527,15 @@ server <- function(input, output, session) {
           "Everything in this section is taken from the approved label as ",
           "published by FDA. Any use outside these species, doses, routes or ",
           "indications is extra-label and is your professional responsibility ",
-          "under AMDUCA. This app does not provide extra-label dosing."),
+          "under AMDUCA. This app does not provide extra-label dosing.",
+          br(), br(),
+          strong("This tool is not a substitute for the approved product "),
+          strong("label or for Animal Drugs @ FDA. "),
+          "It reformats FDA's published data and may lag the current record. ",
+          "Verify against the label and ",
+          tags$a(href = "https://animaldrugsatfda.fda.gov/adafda/views/#/search",
+                 target = "_blank", rel = "noopener", "Animal Drugs @ FDA"),
+          " before prescribing."),
         if (!is.null(dose_note)) p(class = "text-muted small", dose_note) else NULL,
         if (nrow(dose) == 0) p(class = "muted", "No dose statements published for this product.")
         else div(map(seq_len(nrow(dose)), function(i) {

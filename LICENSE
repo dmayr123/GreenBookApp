@@ -39,9 +39,14 @@ any other commercial formulary.
 Clinical disclaimer
 
 This software reformats data published by the U.S. Food and Drug
-Administration. It is not medical advice and is not a substitute for reading
-the approved product label. It presents FDA-labelled use only and provides no
-extra-label dosing. Any use outside the labelled species, dose, route or
-indication is extra-label and remains the prescriber's professional
-responsibility under AMDUCA. Verify all information against the current
-approved label before making a prescribing decision.
+Administration. It is not medical advice.
+
+It is not a substitute for the approved product label, nor for Animal Drugs @
+FDA (https://animaldrugsatfda.fda.gov), which remains the authoritative source.
+This tool holds a periodic extract and may lag the current FDA record.
+
+It presents FDA-labelled use only and provides no extra-label dosing. Any use
+outside the labelled species, dose, route or indication is extra-label and
+remains the prescriber's professional responsibility under AMDUCA. Verify all
+information against the current approved label and against Animal Drugs @ FDA
+before making a prescribing decision.

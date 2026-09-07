@@ -96,6 +96,108 @@ if (dir_exists(edit_dir)) {
   message("Removed the shinylive /edit/ editor from the published site.")
 }
 
+# -- customise the page shell ------------------------------------------------
+#
+# shinylive emits a bare shell titled "Shiny App" with no explanation of the
+# wait. Both matter for a link sent to colleagues: the browser tab is the
+# app's name to anyone who bookmarks it, and the first visit spends up to a
+# minute downloading the R runtime before anything appears. Without a message
+# that looks like a broken page.
+#
+# The notice hides itself once the app's own heading is on screen, and has a
+# hard timeout and a dismiss link so it can never trap a visitor behind it.
+shell <- readLines(path(SITE, "index.html"), warn = FALSE)
+
+shell <- sub("<title>Shiny App</title>",
+             "<title>Green Book Drug Finder</title>", shell, fixed = TRUE)
+
+LOADING_HTML <- '
+<style>
+  #gb-loading {
+    position: fixed; inset: 0; z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    background: #f6f8f9; color: #1c2b33;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 1.5rem; text-align: center;
+  }
+  #gb-loading .box { max-width: 30rem; }
+  #gb-loading h1 { font-size: 1.4rem; margin: 0 0 .6rem; letter-spacing: -.01em; }
+  #gb-loading p { margin: 0 0 .7rem; line-height: 1.55; color: #40525b; font-size: .95rem; }
+  #gb-loading .small { font-size: .82rem; color: #7b8b94; }
+  #gb-loading .bar {
+    height: 3px; background: #dfe6e9; border-radius: 999px;
+    overflow: hidden; margin: 1.1rem 0 .9rem;
+  }
+  #gb-loading .bar span {
+    display: block; height: 100%; width: 35%; background: #0b6b5e;
+    border-radius: 999px; animation: gbslide 1.6s ease-in-out infinite;
+  }
+  @keyframes gbslide {
+    0% { transform: translateX(-100%); } 100% { transform: translateX(340%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #gb-loading .bar span { animation: none; width: 100%; }
+  }
+  #gb-loading a { color: #0b6b5e; }
+</style>
+<div id="gb-loading">
+  <div class="box">
+    <h1>Green Book Drug Finder</h1>
+    <div class="bar"><span></span></div>
+    <p><strong>First visit takes a little while to load.</strong> This app runs
+       R inside your browser, so it downloads the software it needs before it
+       can start &mdash; usually 30 to 60 seconds, longer on a slow
+       connection.</p>
+    <p class="small">Your browser keeps it after that, so every later visit
+       opens straight away. Please leave this tab open.</p>
+    <p class="small"><a href="#" id="gb-dismiss">Hide this message</a></p>
+  </div>
+</div>
+<script>
+  (function () {
+    var el = document.getElementById("gb-loading");
+    if (!el) return;
+    var done = false;
+    function hide() {
+      if (done) return;
+      done = true;
+      el.style.transition = "opacity .35s ease";
+      el.style.opacity = "0";
+      setTimeout(function () { el.remove(); }, 400);
+    }
+    document.getElementById("gb-dismiss")
+      .addEventListener("click", function (e) { e.preventDefault(); hide(); });
+
+    // The app is up once its own landing-page heading is rendered. Same-origin
+    // iframes are searched too, because shinylive may mount the app inside one.
+    function appVisible() {
+      try {
+        if (document.body.innerText.indexOf("Browse by species") !== -1) return true;
+        var frames = document.querySelectorAll("iframe");
+        for (var i = 0; i < frames.length; i++) {
+          var d = frames[i].contentDocument;
+          if (d && d.body && d.body.innerText.indexOf("Browse by species") !== -1) {
+            return true;
+          }
+        }
+      } catch (e) { /* cross-origin frame: ignore */ }
+      return false;
+    }
+
+    var poll = setInterval(function () {
+      if (appVisible()) { clearInterval(poll); hide(); }
+    }, 500);
+
+    // Never leave the notice covering a working app.
+    setTimeout(function () { clearInterval(poll); hide(); }, 240000);
+  })();
+</script>
+'
+
+shell <- sub("<body>", paste0("<body>\n", LOADING_HTML), shell, fixed = TRUE)
+writeLines(shell, path(SITE, "index.html"))
+message("Set the page title and added the first-load notice.")
+
 total <- sum(file_info(dir_ls(SITE, recurse = TRUE, type = "file"))$size)
 message(glue("\nStatic site written to {SITE}/ ({prettyunits::pretty_bytes(total)} on disk)"))
 message("Preview locally:  Rscript -e 'httpuv::runStaticServer(\"docs\", port = 8080)'")
