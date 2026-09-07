@@ -264,6 +264,44 @@ refuses automated requests; not the same as broken), or `CONTENT MISMATCH`
 (the page loads but is not what it should be — what a parked domain looks
 like). The check runs monthly in CI and never fails the build.
 
+### Product label links
+
+Every product carries a link to its label, resolved in this order:
+
+| Tier | Source | Coverage as the primary link |
+| --- | --- | --- |
+| 1 | Manufacturer's own website | 2,051 products (71%) |
+| 2 | FDA FOI summary | 188 products |
+| 3 | Other source, cited — DailyMed SPL, Blue Bird label, FDA-hosted labelling | 49 products |
+| 4 | DailyMed search by trade name | 590 products (21%) |
+
+All 2,876 products resolve to at least one source. Every source is shown on the
+drug page, not just the winner — a vet who cannot reach the manufacturer's site
+needs the fallbacks visible.
+
+**An FOI summary is not the product label.** It is FDA's freedom-of-information
+summary of the approval. It sits at tier 2 because that is the requested search
+order, but each link states what the document actually is, so an approval
+summary is never mistaken for labelling. The documents that genuinely *are*
+labelling — the Structured Product Label, the Blue Bird label for medicated
+feeds, and FDA-hosted labelling — are cited with their source.
+
+Manufacturer sites are matched from FDA's sponsor name in
+`R/label_sources.R`. Two traps that file has to survive:
+
+- FDA's catalogue contains **"Boehringer lngelheim"** — a lowercase `l` where
+  the capital `I` belongs — across two separate sponsor records. The pattern
+  accepts either character.
+- Many sponsors no longer exist (Fort Dodge, Mallinckrodt Veterinary, Wyeth,
+  Roche Vitamins). They are deliberately **absent** from the map: sending a vet
+  to a defunct company's domain, which may since have been re-registered by
+  someone else, is worse than falling through to an FDA document.
+
+Manufacturer URLs are re-checked monthly by the same content-based checker as
+the guideline links, because animal health businesses are acquired and
+rebranded often. 18 of 19 verify by content; Boehringer Ingelheim returns 403
+to automated requests and is reported as blocked.
+
 ### Guideline age limit
 
 **A linked paper or guideline must not be more than 15 years old.** Clinical

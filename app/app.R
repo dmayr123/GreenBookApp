@@ -63,6 +63,18 @@ body { background:#f6f8f9; }
 .dose-pop { font-weight:700; color:var(--gb-ink); margin-bottom:.35rem; }
 .extralabel { border-left-color:#b0762a; }
 .doc-link { display:block; padding:.45rem 0; border-bottom:1px solid var(--gb-line); }
+.label-primary { border:1px solid var(--gb-line); border-left:4px solid var(--gb-accent);
+  border-radius:10px; background:#fff; padding:.9rem 1rem; }
+.label-primary a { font-weight:700; font-size:1.02rem; }
+.src-badge { display:inline-block; font-size:.68rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em; padding:.16rem .5rem;
+  border-radius:999px; background:#e4f1ec; color:#0b6b5e; margin-left:.4rem;
+  vertical-align:2px; }
+.src-badge.tier2 { background:#e7eef7; color:#23558c; }
+.src-badge.tier3 { background:#f2eef7; color:#5a3d8a; }
+.src-badge.tier4 { background:#eceff1; color:#546069; }
+.what-is { color:#5a6b74; font-size:.83rem; margin-top:.2rem; }
+.cite { color:#7b8b94; font-size:.78rem; }
 .gb-footer { color:#7b8b94; font-size:.82rem; padding:2rem 0 1rem; }
 .disclaimer { background:#fff8e6; border:1px solid #f0dfae; border-radius:10px;
   padding:.75rem 1rem; font-size:.85rem; color:#6b551f; }
@@ -328,6 +340,7 @@ server <- function(input, output, session) {
     sp   <- SPECIES      |> filter(proprietaryNameId == pid)
     docs <- DOCUMENTS    |> filter(applicationId == prod$applicationId)
     ndc  <- NDC          |> filter(proprietaryNameId == pid)
+    labels <- LABEL_LINKS |> filter(proprietaryNameId == pid) |> arrange(tier)
 
     # Dosing is filtered to the chosen species when we can tell which
     # population headers belong to it. FDA does not link ail headers to
@@ -444,6 +457,41 @@ server <- function(input, output, session) {
           field("Dosage form", or_none(prod$doseFormName)),
           field("Route", or_none(prod$routes)),
           field("Strength / specifications", or_none(prod$specifications))
+        )
+      )),
+
+      # -- product label -----------------------------------------------------
+      # Ranked manufacturer -> FOI -> other cited source. Every source is
+      # shown, not just the winner: a vet who cannot reach the manufacturer's
+      # site needs the fallbacks visible rather than hidden behind the ranking.
+      card(card_body(
+        h5("Product label"),
+        if (nrow(labels) == 0) p(class = "muted", "No label source located.")
+        else tagList(
+          div(class = "label-primary",
+            tags$a(href = labels$url[1], target = "_blank", rel = "noopener",
+                   labels$sourceName[1]),
+            span(class = paste0("src-badge tier", min(labels$tier[1], 4)),
+                 switch(as.character(min(labels$tier[1], 4)),
+                        "1" = "Manufacturer", "2" = "FDA FOI",
+                        "3" = "Other source", "Search")),
+            div(class = "what-is", labels$whatItIs[1]),
+            div(class = "cite", "Source: ", labels$citation[1],
+                if (identical(labels$link_status[1], "blocked"))
+                  " — this site blocks automated checks; open it in your browser"
+                else NULL)
+          ),
+          if (nrow(labels) > 1) tagList(
+            div(class = "field-label", style = "margin-top:.9rem", "Other sources"),
+            div(map(2:nrow(labels), function(i) {
+              tags$a(class = "doc-link", href = labels$url[i], target = "_blank",
+                     rel = "noopener",
+                     strong(labels$sourceName[i]),
+                     span(class = "what-is", style = "display:block",
+                          labels$whatItIs[i]),
+                     span(class = "cite", "Source: ", labels$citation[i]))
+            }))
+          ) else NULL
         )
       )),
 

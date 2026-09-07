@@ -30,6 +30,7 @@ library(arrow)
 
 source("R/species_taxonomy.R")
 source("R/drug_classes.R")
+source("R/label_sources.R")
 
 raw_dir  <- function(...) path("data", "raw", ...)
 proc_dir <- function(...) path("data", "processed", ...)
@@ -496,7 +497,19 @@ build_all <- function() {
       ))
     )
 
+  # Product label links, ranked manufacturer -> FOI -> other cited source.
+  # NDC carries the DailyMed setid, so it is read back if 03 has already run;
+  # without it the DailyMed tier degrades to a trade-name search rather than
+  # disappearing.
+  ndc_tbl <- if (file_exists(proc_dir("ndc.rds"))) {
+    readRDS(proc_dir("ndc.rds"))
+  } else {
+    tibble(proprietaryNameId = integer(), setid = character())
+  }
+  label_links <- build_label_links(products, applications, documents, ndc_tbl)
+
   dir_create(proc_dir())
+  write_table(label_links,   "label_links")
   write_table(applications,  "applications")
   write_table(products,      "products")
   write_table(ingredients,   "ingredients")

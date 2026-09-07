@@ -55,6 +55,11 @@ if (length(missing)) {
        "\nRun:  Rscript R/01_fetch_adafda.R  then  Rscript R/02_tidy_greenbook.R")
 }
 
+LABEL_LINKS  <- read_table("label_links") %||%
+  tibble(proprietaryNameId = integer(), tier = integer(), sourceName = character(),
+         citation = character(), whatItIs = character(), url = character(),
+         link_status = character())
+
 SEARCH_INDEX <- read_table("search_index")
 PRODUCTS     <- read_table("products")
 APPLICATIONS <- read_table("applications")

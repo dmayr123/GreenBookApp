@@ -115,6 +115,46 @@ check_ages <- function(g, today = Sys.Date()) {
   invisible(dated)
 }
 
+#' Check the manufacturer sites used for tier-1 product label links.
+#'
+#' Animal health companies are acquired and rebranded often -- Bayer's animal
+#' health business went to Elanco, Fort Dodge's to Zoetis -- so a manufacturer
+#' URL that was right when written can quietly start pointing somewhere else.
+#' Each entry is checked for its own name appearing on the page.
+check_manufacturers <- function() {
+  if (!file.exists("R/label_sources.R")) return(invisible(NULL))
+  source("R/label_sources.R", local = TRUE)
+
+  sites <- MANUFACTURER_SITES |> distinct(manufacturer, url)
+  message(sprintf("\nChecking %d manufacturer sites by content ...", nrow(sites)))
+
+  res <- pmap_dfr(sites, function(manufacturer, url) {
+    r <- fetch_text(url)
+    # Match on the first word of the company name: "Merck Animal Health
+    # (Intervet)" will not appear verbatim, but "Merck" will.
+    key <- str_extract(manufacturer, "^[A-Za-z-]+")
+    found <- nzchar(r$text) && str_detect(r$text, regex(key, ignore_case = TRUE))
+    insecure <- !str_starts(url, "https://") ||
+      (!is.na(r$final) && str_starts(r$final, "http://"))
+    tibble(manufacturer, url, status = r$status,
+           verdict = case_when(
+             insecure                  ~ "INSECURE - not HTTPS",
+             is.na(r$status)           ~ "unreachable",
+             r$status %in% c(403, 429) ~ "blocked",
+             r$status >= 400           ~ "http error",
+             found                     ~ "verified",
+             TRUE                      ~ "CONTENT MISMATCH"))
+  })
+
+  print(as.data.frame(res), right = FALSE)
+  bad <- res |> filter(verdict %in% c("CONTENT MISMATCH", "INSECURE - not HTTPS"))
+  if (nrow(bad)) {
+    warning(sprintf("%d manufacturer site(s) need review: %s",
+                    nrow(bad), paste(bad$manufacturer, collapse = ", ")))
+  }
+  invisible(res)
+}
+
 check_links <- function(path = "data/reference/guidelines.csv") {
   g <- read_csv(path, show_col_types = FALSE)
   if (!"expect" %in% names(g)) {
@@ -163,4 +203,7 @@ check_links <- function(path = "data/reference/guidelines.csv") {
   invisible(res)
 }
 
-if (sys.nframe() == 0) check_links()
+if (sys.nframe() == 0) {
+  check_links()
+  check_manufacturers()
+}
