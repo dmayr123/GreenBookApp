@@ -83,6 +83,19 @@ shinylive::export(appdir = BUILD, destdir = SITE)
 # can never start.
 writeLines("", path(SITE, ".nojekyll"))
 
+# shinylive also ships an /edit/ entry point: a live code editor showing the
+# app's source, which a visitor can modify and re-run in their own browser.
+# Nothing they do there can alter the deployed site -- the change lives only in
+# their browser -- and the source is public anyway. It is removed regardless,
+# because this is a clinical reference: an editable view invites someone to
+# alter a dose or an indication and screenshot the result as though it came
+# from the published tool. Visitors get the read-only app.
+edit_dir <- path(SITE, "edit")
+if (dir_exists(edit_dir)) {
+  dir_delete(edit_dir)
+  message("Removed the shinylive /edit/ editor from the published site.")
+}
+
 total <- sum(file_info(dir_ls(SITE, recurse = TRUE, type = "file"))$size)
 message(glue("\nStatic site written to {SITE}/ ({prettyunits::pretty_bytes(total)} on disk)"))
 message("Preview locally:  Rscript -e 'httpuv::runStaticServer(\"docs\", port = 8080)'")

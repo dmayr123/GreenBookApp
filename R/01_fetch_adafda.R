@@ -26,7 +26,7 @@ ADAFDA_BASE <- "https://animaldrugsatfda.fda.gov/adafda/app/search/public"
 # FDA asks that automated users identify themselves.
 UA <- paste0(
   "GreenBookApp/0.1 (R ", getRversion(), "; veterinary drug reference; ",
-  "contact: drdanielle@uwalumni.com)"
+  "+https://github.com/dmayr123/GreenBookApp)"
 )
 
 raw_dir <- function(...) path("data", "raw", ...)

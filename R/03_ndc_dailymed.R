@@ -29,7 +29,7 @@ library(arrow)
 
 DAILYMED <- "https://dailymed.nlm.nih.gov/dailymed/services/v2"
 UA <- paste0("GreenBookApp/0.1 (R ", getRversion(),
-             "; veterinary drug reference; contact: drdanielle@uwalumni.com)")
+             "; veterinary drug reference; +https://github.com/dmayr123/GreenBookApp)")
 
 cache_dir <- function(...) path("data", "raw", "dailymed", ...)
 proc_dir  <- function(...) path("data", "processed", ...)
