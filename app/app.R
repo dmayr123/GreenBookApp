@@ -55,6 +55,17 @@ body { background:#f6f8f9; }
   font-weight:700; padding:.22rem .55rem; border-radius:999px; }
 
 .muted { color:#8a969d; font-style:italic; }
+/* The product name in a result row: a real button, styled as the heading it
+   reads as. Focus is visible because a keyboard user needs to see where they
+   are, which is the whole point of making it focusable. */
+.row-open {
+  background:none; border:0; padding:0; margin:0; font:inherit;
+  font-weight:700; color:var(--gb-ink); text-align:left; cursor:pointer;
+}
+.row-open:hover { color:var(--gb-accent); text-decoration:underline; }
+.row-open:focus-visible {
+  outline:2px solid var(--gb-accent); outline-offset:2px; border-radius:2px;
+}
 .field-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.07em;
   color:#7b8b94; font-weight:700; margin-bottom:.15rem; }
 .field-value { margin-bottom:.9rem; color:var(--gb-ink); }
@@ -318,7 +329,20 @@ server <- function(input, output, session) {
       rowStyle = list(cursor = "pointer"),
       columns = list(
         proprietaryNameId = colDef(show = FALSE),
-        Product = colDef(minWidth = 160, cell = function(v) strong(v)),
+        # The product name is a real <button>, not just styled text. Rows are
+        # opened by a click handler on the row, which a mouse user never
+        # notices but which leaves a keyboard or screen-reader user able to
+        # search and unable to open anything. A button is focusable, announced
+        # as a control, and activates on Enter and Space for free.
+        Product = colDef(
+          minWidth = 160, html = TRUE,
+          cell = function(value, index) {
+            sprintf(
+              paste0('<button type="button" class="row-open" ',
+                     'onclick="Shiny.setInputValue(&quot;row_clicked&quot;, %d, ',
+                     '{priority:&quot;event&quot;})">%s</button>'),
+              tbl$proprietaryNameId[index], htmltools::htmlEscape(value))
+          }),
         Ingredients = colDef(minWidth = 150),
         Type = colDef(minWidth = 130, html = TRUE, cell = function(v) {
           sprintf('<span class="badge-cat %s">%s</span>', category_class(v), v)

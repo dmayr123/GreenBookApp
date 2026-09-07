@@ -69,19 +69,54 @@ decode_fda_signs <- function(x) {
     str_replace_all("greaterThanEqualTo", "≥")
 }
 
-#' Strip HTML tags and decode the handful of entities FDA actually emits.
+# Named HTML entities that appear in FDA's text. A browser resolves these
+# itself, so the HTML columns render correctly either way -- but the plain-text
+# twins are what the search index matches against and what fields such as
+# "Strength / specifications" display, and there a raw "&rsquo;" both shows
+# literally and stops "patient's" from matching "patient&rsquo;s".
+HTML_ENTITIES <- c(
+  nbsp = " ",  amp = "&",   lt = "<",    gt = ">",    quot = '"',
+  apos = "'",  ndash = "–", mdash = "—", reg = "®",   trade = "™",
+  copy = "©",  rsquo = "’", lsquo = "‘", rdquo = "”", ldquo = "“",
+  deg = "°",   micro = "µ", plusmn = "±", le = "≤",   ge = "≥",
+  times = "×", hellip = "…", bull = "•", frac12 = "½", frac14 = "¼"
+)
+
+#' Decode HTML entities, named and numeric.
+#'
+#' Numeric entities are resolved generically rather than from a list, so a
+#' code point FDA has not used before still decodes. That matters clinically:
+#' one dose carried `&#8804;`, which is "≤".
+decode_entities <- function(x) {
+  for (nm in names(HTML_ENTITIES)) {
+    x <- str_replace_all(x, fixed(paste0("&", nm, ";")), HTML_ENTITIES[[nm]])
+  }
+
+  codes <- unique(unlist(str_extract_all(x, "&#x?[0-9A-Fa-f]+;")))
+  for (cd in codes) {
+    m <- str_match(cd, "&#(x?)([0-9A-Fa-f]+);")
+    val <- suppressWarnings(
+      if (nzchar(m[, 2])) strtoi(m[, 3], 16L) else as.integer(m[, 3]))
+    if (is.na(val) || val < 1 || val > 0x10FFFF) next
+    x <- str_replace_all(x, fixed(cd), intToUtf8(val))
+  }
+
+  # Zero-width and byte-order marks decode to invisible characters that then
+  # break string matching in ways nobody can see. Remove them outright.
+  str_replace_all(x, "[​-‍﻿]", "")
+}
+
+#' Strip HTML tags and normalise the quoting conventions FDA stores.
 strip_html <- function(x) {
   x |>
     decode_fda_signs() |>
     str_replace_all("<br\\s*/?>", " ") |>
     str_replace_all("</p>", " ") |>
     str_replace_all("<[^>]*>", "") |>
-    str_replace_all("&nbsp;", " ") |>
-    str_replace_all("&amp;", "&") |>
-    str_replace_all("&lt;", "<") |>
-    str_replace_all("&gt;", ">") |>
-    str_replace_all("&quot;", '"') |>
-    str_replace_all("&#39;", "'") |>
+    decode_entities() |>
+    # FDA stores TeX-style quoting: ``Federal law restricts this drug...''
+    # Converted as a matched pair so a lone apostrophe pair is left alone.
+    str_replace_all("``([^`']*?)''", '"\\1"') |>
     str_squish()
 }
 
@@ -364,11 +399,19 @@ read_spl <- function() {
   map_dfr(raw, function(r) {
     spl <- r$spl %||% list()
     if (length(spl) == 0) return(NULL)
+    # Named for what it actually is. This endpoint returns a ZIP holding a
+    # single raw SPL XML file of a few kilobytes -- machine-readable source,
+    # not a label anyone reads. It was previously listed as "SPL Label
+    # (DailyMed)", which is wrong twice over: it is served by FDA, not
+    # DailyMed, and a clinician clicking it expecting a label gets a download
+    # of XML. The readable label is surfaced separately in the Product label
+    # section; this is kept for anyone who wants the source data.
     map_dfr(spl, function(s) tibble(
       applicationId = as.integer(r$applicationId),
-      docType = "SPL Label (DailyMed)",
+      docType = "SPL source file",
       docId   = as.integer(s$splXmlId %||% NA),
-      title   = clean_name(chr1(s$linkName)) %||% "Structured Product Label",
+      title   = paste0(clean_name(chr1(s$linkName)) %||% "Structured Product Label",
+                       " — XML source, downloads as a ZIP"),
       docDate = NA_character_, summaryHtml = NA_character_,
       url     = paste0(ADAFDA_PUBLIC, "/spl/file/", chr1(s$splXmlId), "/",
                        utils::URLencode(clean_name(chr1(s$linkName)), reserved = TRUE))
