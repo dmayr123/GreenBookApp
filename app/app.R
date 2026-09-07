@@ -93,10 +93,12 @@ home_ui <- function() {
   tagList(
     div(class = "gb-hero",
       h1("Green Book Drug Finder"),
+      # Deliberately makes no completeness claim. An earlier version opened
+      # "Every FDA-approved ... drug", which asserts the extract is exhaustive
+      # -- something no periodic copy of an external database can guarantee,
+      # and not a claim worth defending on a clinical tool.
       p(class = "gb-sub",
-        "Every FDA-approved, conditionally approved and generic animal drug, ",
-        "searchable the way you actually look things up. Start with a species, ",
-        "or search directly if you know what you want.")
+        "Search for drugs by species, or search directly.")
     ),
     card(
       card_body(
