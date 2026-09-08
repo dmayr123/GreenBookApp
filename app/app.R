@@ -58,6 +58,16 @@ body {
 .badge-withdrawn{ background:#fbe6e6; color:#8f2626; font-size:.72rem;
   font-weight:700; padding:.22rem .55rem; border-radius:999px; }
 
+/* Set directly rather than through a Bootstrap theme variable, so bslib does
+   not have to recompile Sass on every visitor's first load. */
+.btn-primary { background-color:var(--gb-accent); border-color:var(--gb-accent); }
+.btn-primary:hover, .btn-primary:focus {
+  background-color:#095448; border-color:#095448;
+}
+.form-check-input:checked { background-color:var(--gb-accent);
+  border-color:var(--gb-accent); }
+a { color:var(--gb-accent); }
+
 .muted { color:#8a969d; font-style:italic; }
 .update-line { display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap;
   margin-top:1rem; font-size:.9rem; color:#5a6b74; }
@@ -124,7 +134,12 @@ ui <- page_fluid(
   # the curl package or capabilities('libcurl')". A system font stack costs
   # nothing to fetch, cannot fail, and renders the same on every platform a
   # vet is likely to use.
-  theme = bs_theme(version = 5, primary = "#0b6b5e"),
+  # Default Bootstrap 5, not a customized theme. Passing `primary` makes bslib
+  # recompile Bootstrap's Sass at startup: 2.0 s here against 0.63 s for the
+  # default, and R runs several times slower again in WebAssembly, so it is
+  # paid out of the visitor's first load. The one thing `primary` bought was
+  # the green Search button, which the stylesheet below sets directly.
+  theme = bs_theme(version = 5),
   tags$head(
     tags$style(HTML(app_css)),
     tags$title("Green Book Drug Finder"),

@@ -193,7 +193,9 @@ LOADING_HTML <- '
        connection.</p>
     <p class="small">Your browser keeps it after that, so every later visit
        opens straight away. Please leave this tab open.</p>
-    <p class="small"><a href="#" id="gb-dismiss">Hide this message</a></p>
+    <p class="small">Still here after a minute or two?
+       <a href="#" id="gb-dismiss">Hide this and show the app</a> &mdash;
+       it may already have loaded behind this notice.</p>
   </div>
 </div>
 <script>
@@ -211,28 +213,44 @@ LOADING_HTML <- '
     document.getElementById("gb-dismiss")
       .addEventListener("click", function (e) { e.preventDefault(); hide(); });
 
-    // The app is up once its own landing-page heading is rendered. Same-origin
-    // iframes are searched too, because shinylive may mount the app inside one.
+    // Deciding when the app is up is harder than it looks, and getting it
+    // wrong is worse than showing no notice at all: shinylive mounts the app
+    // inside an iframe, so scanning only the outer document never finds it,
+    // and the notice then covers a perfectly working app until its timeout
+    // expires. That is indistinguishable from the app hanging.
+    // (Apostrophes are avoided in this block: it is an R single-quoted
+    // string, and one would end it.)
+    //
+    // Three independent signals, any of which means "stop covering the page":
+    //   1. the landing-page heading is in this document
+    //   2. it is in a readable iframe
+    //   3. an iframe has rendered a meaningful amount of anything at all,
+    //      which covers the case where the heading text changes
     function appVisible() {
       try {
         if (document.body.innerText.indexOf("Browse by species") !== -1) return true;
-        var frames = document.querySelectorAll("iframe");
-        for (var i = 0; i < frames.length; i++) {
+      } catch (e) {}
+      var frames = document.querySelectorAll("iframe");
+      for (var i = 0; i < frames.length; i++) {
+        try {
           var d = frames[i].contentDocument;
-          if (d && d.body && d.body.innerText.indexOf("Browse by species") !== -1) {
-            return true;
-          }
-        }
-      } catch (e) { /* cross-origin frame: ignore */ }
+          if (!d || !d.body) continue;
+          var t = d.body.innerText || "";
+          if (t.indexOf("Browse by species") !== -1) return true;
+          if (t.replace(/\\s/g, "").length > 200) return true;
+        } catch (e) { /* cross-origin frame: cannot read, try the next */ }
+      }
       return false;
     }
 
     var poll = setInterval(function () {
       if (appVisible()) { clearInterval(poll); hide(); }
-    }, 500);
+    }, 400);
 
-    // Never leave the notice covering a working app.
-    setTimeout(function () { clearInterval(poll); hide(); }, 240000);
+    // Short stop. If the app really is still loading the page underneath is
+    // blank and harmless, whereas a notice that outlives the app it describes
+    // makes a working tool look broken.
+    setTimeout(function () { clearInterval(poll); hide(); }, 45000);
   })();
 </script>
 '
