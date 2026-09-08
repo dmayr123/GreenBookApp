@@ -87,6 +87,24 @@ jobs:
       # parked page before anyone noticed. Never fails the build: an
       # association site behind bot protection must not block publishing
       # current FDA data.
+      # Read the FDA application number off any label not already recorded in
+      # data/reference/dailymed_appnumbers.csv. Without this a drug approved
+      # since the last run would fall back to name matching, which is what put
+      # a cattle injection label on a swine medicated article. Only new labels
+      # are fetched, so this is cheap after the first run.
+      - name: Read application numbers from new labels
+        run: Rscript scripts/build_dailymed_appnumbers.R
+        continue-on-error: true
+
+      - name: Refresh manufacturer product pages
+        run: Rscript scripts/build_manufacturer_links.R
+        continue-on-error: true
+
+      # Rebuild so the label links pick up the two reference tables above.
+      # 04 ran the tidy step before they were refreshed.
+      - name: Rebuild tables with the refreshed references
+        run: Rscript R/02_tidy_greenbook.R
+
       - name: Check guideline links and ages
         run: Rscript scripts/check_guideline_links.R 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
         continue-on-error: true
