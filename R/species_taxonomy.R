@@ -7,7 +7,7 @@
 #   * "Sheep  (Domestic)" contains a double space.
 #   * Honeybees are filed under "Bees".
 # The lookup below is therefore explicit rather than derived: each raw FDA
-# label is assigned to exactly one group, and anything unrecognised falls into
+# label is assigned to exactly one group, and anything unrecognized falls into
 # "Other minor species" rather than silently vanishing from the picker.
 # ---------------------------------------------------------------------------
 
@@ -39,7 +39,7 @@ SPECIES_GROUPS <- tribble(
 
 #' Raw FDA species label -> group.
 #'
-#' Matching is done on the normalised label (lowercase, punctuation and
+#' Matching is done on the normalized label (lowercase, punctuation and
 #' whitespace removed) so "Sheep  (Domestic)" and "Sheep (Domestic)" collapse
 #' to the same key.
 SPECIES_LOOKUP <- tribble(
@@ -81,12 +81,12 @@ norm_species <- function(x) {
 
 #' Attach a `speciesGroup` column to a table holding raw `speciesName`.
 #'
-#' Unrecognised labels are mapped to "other_minor" so a new FDA species label
+#' Unrecognized labels are mapped to "other_minor" so a new FDA species label
 #' degrades to "findable under Other" instead of disappearing.
 assign_species_group <- function(df, col = "speciesName") {
   # Several raw labels differ only in punctuation or spacing ("Sheep
   # (Domestic)" vs "Sheep  (Domestic)") and therefore collapse to the same
-  # normalised key. Deduplicating here keeps the join one-to-one; without it
+  # normalized key. Deduplicating here keeps the join one-to-one; without it
   # every sheep product would be duplicated in the output.
   key <- SPECIES_LOOKUP |>
     mutate(k = norm_species(raw)) |>

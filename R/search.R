@@ -32,11 +32,11 @@ norm_text <- function(x) {
     coalesce("")
 }
 
-#' Split a query into normalised tokens.
+#' Split a query into normalized tokens.
 #'
 #' Splitting happens on the raw query, before punctuation is stripped, so
 #' "fluralaner, cattle" yields two tokens rather than one run-on string.
-#' Tokens that normalise to nothing (a lone hyphen) are dropped.
+#' Tokens that normalize to nothing (a lone hyphen) are dropped.
 tokenize_query <- function(query) {
   if (is.null(query) || !nzchar(str_trim(query))) return(character())
   parts <- str_split(str_trim(query), "\\s+")[[1]]
@@ -50,7 +50,7 @@ tokenize_query <- function(query) {
 #' why a row ranked where it did. Points are additive across tokens.
 score_matches <- function(idx, tokens, full_key = "") {
   # These are precomputed columns on the index (02_tidy_greenbook.R). Falling
-  # back to normalising on the fly keeps the function usable against an older
+  # back to normalizing on the fly keeps the function usable against an older
   # index, but the fast path is the one that runs in the app.
   name_key <- idx$nameKey %||% norm_text(idx$proprietaryName)
   ing_key  <- idx$ingKey  %||% norm_text(idx$ingredients)
@@ -139,7 +139,7 @@ search_drugs <- function(idx, query = "", deep = FALSE,
 
 #' Suggestions for the type-ahead box.
 #'
-#' Draws from trade names and ingredients, prefix-matched on the normalised
+#' Draws from trade names and ingredients, prefix-matched on the normalized
 #' form so typing "ca1" surfaces "PANOQUELL-CA1".
 suggest_terms <- function(idx, query, n = 8) {
   tk <- tokenize_query(query)

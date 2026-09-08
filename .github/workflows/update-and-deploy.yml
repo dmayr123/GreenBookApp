@@ -7,7 +7,7 @@
 # repository without bound. Nothing generated is ever pushed back.
 #
 # data/raw is cached between runs, so only the first run pays for the full
-# ~5,000-request crawl of FDA's API. Later runs diff the catalogue and
+# ~5,000-request crawl of FDA's API. Later runs diff the catalog and
 # re-fetch only what changed, which usually takes a couple of minutes.
 # ---------------------------------------------------------------------------
 
@@ -83,7 +83,7 @@ jobs:
 
       # Runs every month rather than annually. Links rot and guidelines age
       # continuously, and a yearly job is one that has eleven months to be
-      # silently wrong -- one organisation domain had already lapsed to a
+      # silently wrong -- one organization domain had already lapsed to a
       # parked page before anyone noticed. Never fails the build: an
       # association site behind bot protection must not block publishing
       # current FDA data.

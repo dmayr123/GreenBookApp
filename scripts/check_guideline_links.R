@@ -2,7 +2,7 @@
 # check_guideline_links.R -- verify guideline links by CONTENT, not status code
 #
 # A 200 response proves nothing. The International Veterinary Epilepsy Task
-# Force's former organisation domain returned HTTP 200 while actually
+# Force's former organization domain returned HTTP 200 while actually
 # redirecting to an unsecured parked page with nothing to do with the task
 # force. Checking only the status code marked that link "verified" and shipped
 # a dead reference to a clinician. The entry now points at the consensus paper
@@ -100,7 +100,7 @@ check_ages <- function(g, today = Sys.Date()) {
   message(sprintf("\nAge check (limit %d years; cutoff = published %d or later):",
                   GUIDELINE_MAX_AGE_YEARS, cutoff))
   if (nrow(dated) == 0) {
-    message("  no dated entries; all links are organisation hubs.")
+    message("  no dated entries; all links are organization hubs.")
   } else {
     print(as.data.frame(dated |> select(organization, published, age, state,
                                         title)), right = FALSE)

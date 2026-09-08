@@ -80,8 +80,8 @@ DRUG_CLASS_RULES <- tribble(
   "oxytocin|progesterone|estradiol|testosterone|trenbolone",  "reproductive",
   "somatotropin|zeranol|ractopamine",                         "production",
 
-  # -- behaviour / GI / other ----------------------------------------------
-  "fluoxetine|clomipramine|sertraline|paroxetine|selegiline", "behavioural",
+  # -- behavior / GI / other ----------------------------------------------
+  "fluoxetine|clomipramine|sertraline|paroxetine|selegiline", "behavioral",
   "maropitant|ondansetron|metoclopramide|dolasetron",         "antiemetic",
   "omeprazole|famotidine|ranitidine|sucralfate|pantoprazole", "gastrointestinal",
   "cyclosporine|oclacitinib|lokivetmab|azathioprine",         "immunomodulator",
@@ -117,15 +117,15 @@ classify_ingredients <- function(ingredient_names) {
 
 #' Guidelines that apply to a product.
 #'
-#' Matches on the product's drug classes and on the species it is labelled
+#' Matches on the product's drug classes and on the species it is labeled
 #' for. A class rule may also carry a `species_scope`: the equine
 #' antimicrobial guidance from AAEP is relevant to an equine antimicrobial,
 #' not to every antimicrobial, so a scoped rule only fires when the product is
-#' actually labelled for that species. Rules with an empty scope
+#' actually labeled for that species. Rules with an empty scope
 #' (AVMA, ACVIM, IVETF, WSAVA) apply regardless.
 #'
 #' De-duplication is by URL rather than by title, because the same
-#' organisation page is reached by both a class rule and a species rule and
+#' organization page is reached by both a class rule and a species rule and
 #' should be offered once.
 match_guidelines <- function(guidelines, classes = character(),
                              species_groups = character()) {

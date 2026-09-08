@@ -27,7 +27,7 @@ For each drug:
 | Active ingredients | ADAFDA |
 | Labeler / sponsor | ADAFDA |
 | Product type | Collapsed from ADAFDA type + status |
-| Labelled use, dose, indication | ADAFDA, filtered to the chosen species |
+| Labeled use, dose, indication | ADAFDA, filtered to the chosen species |
 | Withdrawal period | ADAFDA |
 | FOI summaries, product labels, SPL | ADAFDA document endpoints |
 | Pioneer product | ADAFDA `pioneerApplicationNumber` |
@@ -69,7 +69,7 @@ endpoints the site's own JavaScript calls:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /advancedSearchForExcelPdf` | Whole catalogue in one request (~2,425 applications) |
+| `POST /advancedSearchForExcelPdf` | Whole catalog in one request (~2,425 applications) |
 | `GET /retrievePreviewBean/{id}` | Full detail: sponsor, ingredients, species, dose, documents |
 | `GET /spllink/{id}` | Structured Product Label links |
 | `GET /document/downloadFoi/{id}` | FOI summary PDFs |
@@ -89,19 +89,19 @@ ingredients      one row per application x active ingredient
 product_species  one row per product x species, carrying the use class
 dosing           one row per product x indication (dose + indication)
 documents        one row per downloadable FOI / label / SPL
-search_index     denormalised, one row per product, drives the search box
+search_index     denormalized, one row per product, drives the search box
 ```
 
 FDA's species vocabulary is inconsistent — `Equids` (105 products) and
 `Horses` (2 products) are separate labels for the same animal, and
 `Sheep  (Domestic)` contains a double space. `R/species_taxonomy.R` maps every
-raw label onto one of thirteen groups; unrecognised labels fall into
+raw label onto one of thirteen groups; unrecognized labels fall into
 "Other minor species" rather than disappearing.
 
 ## Monthly updates
 
 FDA republishes the Green Book monthly. `R/04_monthly_update.R` fetches the
-catalogue (one request), diffs it against the copy on disk, re-fetches detail
+catalog (one request), diffs it against the copy on disk, re-fetches detail
 records only for applications that are new or changed, rebuilds the tidy
 tables, and writes a dated changelog to `data/changelog/`.
 
@@ -154,7 +154,7 @@ the task will fail — it logs the reason rather than failing silently.
 ### FDA's application type is wrong for 4 conditional approvals
 
 **FDA's `applicationType` field cannot be trusted to identify conditional
-approvals.** It reports 7 of the 11 conditional approvals in the catalogue.
+approvals.** It reports 7 of the 11 conditional approvals in the catalog.
 These four are typed `N` (full NADA) but are conditionally approved:
 
 | Product | Application | FDA type | Confirmed by |
@@ -258,9 +258,9 @@ older equivalent. Both run real R servers, so the app starts instantly and
 
 ## Known limitations
 
-**NDC coverage is partial.** The Green Book is organised by application
-number and carries no NDC at all; NDCs live in the labeller's Structured
-Product Label. `03_ndc_dailymed.R` joins them from DailyMed by normalised
+**NDC coverage is partial.** The Green Book is organized by application
+number and carries no NDC at all; NDCs live in the labeler's Structured
+Product Label. `03_ndc_dailymed.R` joins them from DailyMed by normalized
 trade name. Where the DailyMed title matches exactly, the NDC is shown
 plainly; where only the name stem matched, the app labels it
 *"matched by name stem — verify before use"*. Products with no DailyMed match
@@ -275,21 +275,21 @@ source.
 free-text population headers ("Beef cattle 2 months of age and older") with no
 species code attached. The app matches those headers against the species
 labels textually; when it cannot attribute them confidently it shows all
-labelled doses and says so, rather than hiding doses it is unsure about.
+labeled doses and says so, rather than hiding doses it is unsure about.
 
 **Guideline links are curated, not exhaustive.** `data/reference/guidelines.csv`
-is a map of drug class and species to publishing organisation. It is a plain
+is a map of drug class and species to publishing organization. It is a plain
 CSV — add rows to extend it.
 
 Links are checked **by content, not status code**. `scripts/check_guideline_links.R`
 fetches each URL and requires the string in the `expect` column to appear on
 the page. This matters: the International Veterinary Epilepsy Task Force's
-former organisation domain returned HTTP 200 while actually redirecting to an
+former organization domain returned HTTP 200 while actually redirecting to an
 unsecured parked page with nothing to do with the task force. A status-code
 check called that link healthy and shipped a dead reference to a clinician.
 
-**Prefer a direct link to the open-access paper over an organisation's home
-page.** Organisation domains lapse and get re-registered; a paper's DOI or PMC
+**Prefer a direct link to the open-access paper over an organization's home
+page.** Organization domains lapse and get re-registered; a paper's DOI or PMC
 identifier does not. The IVETF entry now points at the consensus report
 itself.
 
@@ -309,8 +309,8 @@ Every product carries a link to its label, resolved in this order:
 | Tier | Source | Primary link for |
 | --- | --- | --- |
 | 1 | Manufacturer's own website | 2,049 products (71%) |
-| 2 | Structured Product Label — the labeller's full approved label, via DailyMed | 108 products |
-| 3 | Other FDA-published labelling — Blue Bird label, FDA-hosted labelling | 10 products |
+| 2 | Structured Product Label — the labeler's full approved label, via DailyMed | 108 products |
+| 3 | Other FDA-published labeling — Blue Bird label, FDA-hosted labeling | 10 products |
 | 4 | FDA FOI summary | 119 products |
 | 5 | DailyMed search by trade name | 590 products (21%) |
 
@@ -318,10 +318,10 @@ All 2,876 products resolve to at least one source. Every source is shown on the
 drug page, not just the winner — a vet who cannot reach the manufacturer's site
 needs the fallbacks visible.
 
-**Actual labelling is ranked above the FOI summary deliberately.** An FOI
+**Actual labeling is ranked above the FOI summary deliberately.** An FOI
 summary is FDA's freedom-of-information summary of the approval: useful for
 understanding the basis of approval, but not a document to check a dose or a
-withdrawal period against. Ranking it below real labelling means the primary
+withdrawal period against. Ranking it below real labeling means the primary
 link on a drug page is the document a clinician actually needs. It is still
 offered underneath, and every link states what the document is and names its
 source, so nothing is presented as something it is not.
@@ -329,7 +329,7 @@ source, so nothing is presented as something it is not.
 Manufacturer sites are matched from FDA's sponsor name in
 `R/label_sources.R`. Two traps that file has to survive:
 
-- FDA's catalogue contains **"Boehringer lngelheim"** — a lowercase `l` where
+- FDA's catalog contains **"Boehringer lngelheim"** — a lowercase `l` where
   the capital `I` belongs — across two separate sponsor records. The pattern
   accepts either character.
 - Many sponsors no longer exist (Fort Dodge, Mallinckrodt Veterinary, Wyeth,
@@ -355,7 +355,7 @@ something once a year is a rule that eventually lapses. The cutoff advances on
 its own each January, and expired rows are dropped with a warning naming them.
 
 Set the `published` column to the publication year for a dated paper. Leave it
-blank for an organisation hub (AVMA's policy index, AAHA's guidelines page):
+blank for an organization hub (AVMA's policy index, AAHA's guidelines page):
 those are continuously revised, carry no single publication date, and are
 never expired by age. The monthly link check reports anything expiring within
 three years, so it can be replaced with a newer edition rather than silently
@@ -370,7 +370,7 @@ Handbook** or any other commercial formulary. Plumb's (© 2023 Educational
 Concepts LLC / Wiley) was used only as a factual reference when assigning
 pharmacologic classes to active ingredients; no text, dose or monograph from
 it is reproduced or redistributed here. Extra-label dosing is out of scope by
-design — the app shows FDA-labelled use only, and says so on every drug page.
+design — the app shows FDA-labeled use only, and says so on every drug page.
 
 ## Clinical disclaimer
 
@@ -379,7 +379,7 @@ design — the app shows FDA-labelled use only, and says so on every drug page.
 reformats a periodic extract of FDA's published data and may lag the current
 FDA record.
 
-It does not provide extra-label dosing. Any use outside the labelled species,
+It does not provide extra-label dosing. Any use outside the labeled species,
 dose, route or indication is extra-label and is the prescriber's professional
 responsibility under AMDUCA. Verify against the current approved label and
 against Animal Drugs @ FDA before making a prescribing decision.

@@ -4,7 +4,7 @@
 # Three views, driven by a single `view` reactive value:
 #   home     species tiles, or a quick search that skips straight to results
 #   results  the filtered, ranked product list
-#   detail   one product: identity, labelled use by species, documents, links
+#   detail   one product: identity, labeled use by species, documents, links
 #
 # The species choice is deliberately sticky across views. A vet who starts by
 # picking "Cattle" is asking every subsequent question in a cattle context, so
@@ -226,7 +226,7 @@ home_ui <- function() {
     div(class = "mt-4",
       h5("Browse by species"),
       p(class = "text-muted small mb-0",
-        "Choosing a species filters the labelled dose and indication shown on each drug."),
+        "Choosing a species filters the labeled dose and indication shown on each drug."),
       div(class = "species-grid",
         pmap(SPECIES_TILES, function(group, label, icon, major, n) {
           actionButton(
@@ -248,7 +248,7 @@ home_ui <- function() {
       strong("Not a substitute for the approved product label or for "),
       strong("Animal Drugs @ FDA. "),
       "This tool reformats a periodic extract of FDA's published data and may ",
-      "lag the current FDA record. It shows FDA-labelled use only. Verify ",
+      "lag the current FDA record. It shows FDA-labeled use only. Verify ",
       "against the current approved label and against ",
       tags$a(href = "https://animaldrugsatfda.fda.gov/adafda/views/#/search",
              target = "_blank", rel = "noopener", "Animal Drugs @ FDA"),
@@ -594,11 +594,11 @@ server <- function(input, output, session) {
                                           !nzchar(h))
         if (any(keep)) {
           dose <- dose[keep, , drop = FALSE]
-          dose_note <- sprintf("Showing doses labelled for %s.", species_label())
+          dose_note <- sprintf("Showing doses labeled for %s.", species_label())
         } else {
           dose_note <- paste0(
             "FDA does not separate this product's dose statements by species, ",
-            "so all labelled doses are shown.")
+            "so all labeled doses are shown.")
         }
       }
     }
@@ -731,9 +731,9 @@ server <- function(input, output, session) {
         )
       )),
 
-      # -- species and labelled use -----------------------------------------
+      # -- species and labeled use -----------------------------------------
       card(card_body(
-        h5("Labelled species and use class"),
+        h5("Labeled species and use class"),
         if (nrow(sp) == 0) p(class = "muted", "No species listed.") else
           div(map(seq_len(nrow(sp)), function(i) {
             div(class = "mb-1",
@@ -745,9 +745,9 @@ server <- function(input, output, session) {
 
       # -- dosing ------------------------------------------------------------
       card(card_body(
-        h5("Labelled dose and indication"),
+        h5("Labeled dose and indication"),
         div(class = "disclaimer mb-3",
-          strong("FDA-labelled use. "),
+          strong("FDA-labeled use. "),
           "Everything in this section is taken from the approved label as ",
           "published by FDA. Any use outside these species, doses, routes or ",
           "indications is extra-label and is your professional responsibility ",
@@ -829,8 +829,8 @@ server <- function(input, output, session) {
       card(card_body(
         h5("Professional guidance"),
         p(class = "text-muted small",
-          "Matched on this product's drug class and labelled species. ",
-          "These are links to the publishing organisation, not a statement ",
+          "Matched on this product's drug class and labeled species. ",
+          "These are links to the publishing organization, not a statement ",
           "that a guideline endorses this product."),
         if (nrow(guides) == 0) p(class = "muted", "No mapped guidance for this drug class.")
         else div(map(seq_len(nrow(guides)), function(i) {

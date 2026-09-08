@@ -3,13 +3,13 @@
 #
 # FDA republishes the Green Book in its entirety every month. A full re-crawl
 # takes ~15 minutes and ~5,000 requests against a government server, so this
-# script does the polite thing instead: pull the catalogue (one request),
+# script does the polite thing instead: pull the catalog (one request),
 # diff it against the copy on disk, and re-fetch detail records only for
 # applications that are new or whose type/status changed.
 #
 # The diff is also the point of the exercise. A conditional approval moving
 # from CNADA to NADA, or a product being voluntarily withdrawn, is exactly the
-# kind of change a practising vet needs told about -- so every run writes a
+# kind of change a practicing vet needs told about -- so every run writes a
 # dated changelog rather than silently overwriting the data.
 #
 # Run:  Rscript R/04_monthly_update.R
@@ -30,7 +30,7 @@ CHANGELOG <- path("data", "changelog")
 # sourced later in the run.
 proc_dir  <- function(...) path("data", "processed", ...)
 
-#' Compare the freshly fetched catalogue against the one already on disk.
+#' Compare the freshly fetched catalog against the one already on disk.
 compare_catalogues <- function(old_path, new_json) {
   new <- as_tibble(fromJSON(new_json)) |>
     select(applicationId, applicationNumber, applicationType,
@@ -48,7 +48,7 @@ compare_catalogues <- function(old_path, new_json) {
            voluntaryWithdrawalDate_old = character())
 
   if (!file_exists(old_path)) {
-    message("No previous catalogue; treating every application as new.")
+    message("No previous catalog; treating every application as new.")
     return(list(new = new, added = new, changed = empty_changed,
                 withdrawn = empty_changed, refetch = new$applicationId))
   }
@@ -96,13 +96,13 @@ write_update_log <- function(diff, keep_months = 24, verified = FALSE) {
   # marketed product as withdrawn. On a clinical tool that is the most
   # dangerous class of bug there is: confidently wrong drug status.
   #
-  # run_monthly_update() passes verified = TRUE after diffing the catalogue it
+  # run_monthly_update() passes verified = TRUE after diffing the catalog it
   # actually fetched from FDA. Nothing else can write this file, so a
   # simulation can no longer reach the app no matter how it is invoked.
   if (!isTRUE(verified)) {
     warning("write_update_log(): refusing to write. Only run_monthly_update() ",
             "may write the update log, because it is the only caller that has ",
-            "diffed a catalogue actually fetched from FDA. Simulated or test ",
+            "diffed a catalog actually fetched from FDA. Simulated or test ",
             "diffs must never reach data/processed.")
     return(invisible(NULL))
   }
@@ -243,7 +243,7 @@ run_monthly_update <- function() {
 
   old_path <- raw_dir("catalogue.json")
 
-  # Fetch the catalogue to a temporary location so a failure part-way through
+  # Fetch the catalog to a temporary location so a failure part-way through
   # cannot leave us with a half-written baseline to diff against next month.
   body <- toJSON(EMPTY_CRITERIA, auto_unbox = TRUE, null = "null")
   txt <- adafda_req("advancedSearchForExcelPdf") |>
@@ -259,7 +259,7 @@ run_monthly_update <- function() {
                "withdrawn: {nrow(diff$withdrawn)}"))
 
   write_changelog(diff)
-  # verified = TRUE: `diff` came from the catalogue fetched above, not a fixture.
+  # verified = TRUE: `diff` came from the catalog fetched above, not a fixture.
   write_update_log(diff, verified = TRUE)
 
   if (length(diff$refetch)) {
@@ -274,7 +274,7 @@ run_monthly_update <- function() {
     message("No detail records need re-fetching.")
   }
 
-  # Promote the new catalogue only once the detail crawl has succeeded.
+  # Promote the new catalog only once the detail crawl has succeeded.
   file_copy(tmp, old_path, overwrite = TRUE)
   fetch_reference()
 

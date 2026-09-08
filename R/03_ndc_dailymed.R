@@ -2,7 +2,7 @@
 # 03_ndc_dailymed.R -- attach NDC codes from DailyMed
 #
 # Animal Drugs @ FDA does not carry NDC codes at all: the Green Book is
-# organised by application number, and the NDC lives in the labeller's
+# organized by application number, and the NDC lives in the labeler's
 # Structured Product Label. DailyMed publishes those labels, so the NDC has
 # to be joined in from there.
 #
@@ -12,7 +12,7 @@
 # cached per product on disk, so the monthly refresh only pays for products
 # whose label actually changed.
 #
-# Matching is by normalised proprietary name. That is imperfect: a label whose
+# Matching is by normalized proprietary name. That is imperfect: a label whose
 # DailyMed title differs from the Green Book trade name will not match, and
 # such products simply carry no NDC rather than a guessed one. `matchType`
 # records how each NDC was found so the app can show its provenance.
@@ -170,10 +170,10 @@ lookup_name <- function(stem) {
       setid     = e$setid,
       splTitle  = e$title,
       # The DailyMed title is "NAME (INGREDIENT) FORM [LABELLER]"; the trade
-      # name is everything before the first parenthesis and the labeller is
+      # name is everything before the first parenthesis and the labeler is
       # the trailing bracketed segment.
       splName   = str_squish(str_remove(e$title, "\\s*\\(.*$")),
-      # Dose form sits between the ingredient parenthesis and the labeller
+      # Dose form sits between the ingredient parenthesis and the labeler
       # bracket, and is what keeps an injectable label's NDC codes off a
       # medicated feed article.
       splForm   = str_squish(str_extract(e$title, "(?<=\\))[^\\[]*") %||% ""),
@@ -191,7 +191,7 @@ build_ndc_table <- function() {
   # same_company(): DailyMed carries human labels alongside veterinary ones,
   # and trade names collide across the two. Matching on name alone attached a
   # Bracco Diagnostics human contrast agent's NDC codes to a Zoetis
-  # veterinary product. The labeller must correspond to FDA's sponsor.
+  # veterinary product. The labeler must correspond to FDA's sponsor.
   source("R/label_dailymed.R", local = TRUE)
 
   products <- read_parquet(proc_dir("products.parquet"))
@@ -223,7 +223,7 @@ build_ndc_table <- function() {
   dm <- mutate(dm, splKey = norm_text(splName),
                    labelerKey = norm_text(splLabeler))
 
-  # An exact name match is trustworthy only when the labeller is also the
+  # An exact name match is trustworthy only when the labeler is also the
   # sponsor FDA recorded.
   exact <- products |>
     inner_join(dm, by = c("stem", "nameKey" = "splKey"),
@@ -235,7 +235,7 @@ build_ndc_table <- function() {
   # A stem-only match is trustworthy in exactly one case: when the stem
   # resolves to a single SPL, so there is nothing to confuse it with. Applied
   # unconditionally it is worse than useless -- the stem "Carprofen" matches
-  # every labeller's carprofen product, which attached 2,923 NDCs to one
+  # every labeler's carprofen product, which attached 2,923 NDCs to one
   # entry. Better to show no NDC and a DailyMed search link than a wrong one.
   unambiguous <- dm |>
     group_by(stem) |>

@@ -5,13 +5,13 @@
 # Manufacturers publish sitemaps listing every page they have, so the product
 # pages can be discovered rather than guessed. The alternative -- constructing
 # URLs from a naming convention -- breaks silently the moment a company
-# reorganises its site, and a confident link to a 404 is worse than no link.
+# reorganizes its site, and a confident link to a 404 is worse than no link.
 #
 # Two rules keep this honest:
 #
 #   * Match on the trade name's first word against the URL's last path
 #     segment, and only when that word is distinctive (4+ characters). A short
-#     stem matches half a catalogue.
+#     stem matches half a catalog.
 #   * Fetch every candidate page and require the trade name to appear on it.
 #     A sitemap entry proves a URL was published, not that it still resolves
 #     or still concerns that product.
@@ -44,7 +44,7 @@ UA <- paste0("GreenBookApp/0.1 (R ", getRversion(),
 #' Elanco, Ceva and Boehringer Ingelheim are deliberately absent. Their
 #' sitemaps list news and policy pages but not individual products, and
 #' Elanco's product URLs are not guessable either -- every constructed form
-#' returns 404. Their products keep the catalogue link, which is honest about
+#' returns 404. Their products keep the catalog link, which is honest about
 #' being a starting point, rather than a fabricated deep link.
 MANUFACTURER_SITEMAPS <- tribble(
   ~manufacturer,                    ~sitemap,                                                      ~product_pattern,

@@ -7,16 +7,16 @@
 #
 #   1. the Structured Product Label on DailyMed -- the approved label itself,
 #      the package insert content
-#   2. other FDA-published labelling (Blue Bird label, FDA-hosted labelling)
+#   2. other FDA-published labeling (Blue Bird label, FDA-hosted labeling)
 #   3. the manufacturer's own page for this product
-#   4. the manufacturer's catalogue, when they publish no per-product page
+#   4. the manufacturer's catalog, when they publish no per-product page
 #   5. the FDA FOI summary
 #   6. a DailyMed search by trade name, when nothing above is on file
 #
-# Actual labelling outranks the FOI summary deliberately. An **FOI summary is
+# Actual labeling outranks the FOI summary deliberately. An **FOI summary is
 # not the product label**: it is FDA's freedom-of-information summary of the
 # approval, useful for understanding the basis of approval but not for
-# checking a dose or a withdrawal period. Ranking it below real labelling
+# checking a dose or a withdrawal period. Ranking it below real labeling
 # means the primary link on a drug page is the document a clinician actually
 # needs, and the FOI is still offered underneath.
 #
@@ -37,7 +37,7 @@ library(readr)
 #' Matched as a case-insensitive regex against FDA's sponsor name, because the
 #' same company appears under several spellings. Two traps this has to survive:
 #'
-#'   * FDA's catalogue contains "Boehringer lngelheim" -- a lowercase L where
+#'   * FDA's catalog contains "Boehringer lngelheim" -- a lowercase L where
 #'     the capital I belongs -- in two separate sponsor records. The pattern
 #'     accepts either character.
 #'   * Many sponsors no longer exist (Fort Dodge, Mallinckrodt Veterinary,
@@ -165,7 +165,7 @@ build_label_links <- function(products, applications, documents, ndc,
   # Resolved from manufacturer sitemaps and verified page by page
   # (scripts/build_manufacturer_links.R). Only some manufacturers publish
   # discoverable product pages, so this covers a minority of products; the
-  # rest fall through to the catalogue below, which is honest about being a
+  # rest fall through to the catalog below, which is honest about being a
   # starting point rather than a link to the product itself.
   pages_file <- file.path("data", "reference", "manufacturer_product_pages.csv")
   product_pages <- if (file.exists(pages_file)) {
@@ -186,7 +186,7 @@ build_label_links <- function(products, applications, documents, ndc,
       url, link_status = "verified"
     )
 
-  # -- tier 4: manufacturer catalogue, when no product page exists ---------
+  # -- tier 4: manufacturer catalog, when no product page exists ---------
   man <- prod |>
     anti_join(man_page, by = "proprietaryNameId") |>
     inner_join(match_manufacturer(applications), by = "applicationId") |>
@@ -194,11 +194,11 @@ build_label_links <- function(products, applications, documents, ndc,
       proprietaryNameId, tier = 4L,
       sourceName = manufacturer,
       citation   = paste0(manufacturer, " (manufacturer)"),
-      whatItIs   = "Manufacturer's product catalogue — this manufacturer does not publish a direct link to each product",
+      whatItIs   = "Manufacturer's product catalog — this manufacturer does not publish a direct link to each product",
       url, link_status
     )
 
-  # -- tier 2: other FDA-published labelling -------------------------------
+  # -- tier 2: other FDA-published labeling -------------------------------
   fda_lbl <- prod |>
     inner_join(documents |> filter(docType == "Product Label") |>
                  group_by(applicationId) |> slice(1) |> ungroup() |>
@@ -208,7 +208,7 @@ build_label_links <- function(products, applications, documents, ndc,
       proprietaryNameId, tier = 2L,
       sourceName = "Product label (FDA)",
       citation   = "U.S. FDA, Animal Drugs @ FDA",
-      whatItIs   = "Labelling published by FDA for this application",
+      whatItIs   = "Labeling published by FDA for this application",
       url, link_status = "verified"
     )
 
@@ -227,7 +227,7 @@ build_label_links <- function(products, applications, documents, ndc,
 
   # -- tier 5: FOI summary -------------------------------------------------
   #
-  # Ranked below real labelling: this is the basis-of-approval summary, not a
+  # Ranked below real labeling: this is the basis-of-approval summary, not a
   # document to check a dose against.
   foi <- prod |>
     inner_join(documents |> filter(docType == "FOI Summary") |>

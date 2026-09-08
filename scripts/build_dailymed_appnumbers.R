@@ -3,7 +3,7 @@
 #
 # Every veterinary label on DailyMed cites the FDA application it was approved
 # under: "NADA 141-063", "ANADA 200-747". That number is the same key the
-# Green Book is organised by, so it identifies a label exactly -- no name
+# Green Book is organized by, so it identifies a label exactly -- no name
 # matching, no guessing about species or dose form.
 #
 # This exists because name matching kept producing plausible wrong answers.
@@ -36,7 +36,7 @@ UA <- paste0("GreenBookApp/0.1 (R ", getRversion(),
 OUT <- path("data", "reference", "dailymed_appnumbers.csv")
 DM_XML <- "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/"
 
-#' Application numbers cited anywhere in a label, normalised to digits.
+#' Application numbers cited anywhere in a label, normalized to digits.
 #'
 #' FDA writes them several ways -- "NADA 141-063", "NADA141063", "ANADA
 #' #200-747" -- so the separators are stripped and only the six digits kept.

@@ -3,7 +3,7 @@
 #
 # ADAFDA (https://animaldrugsatfda.fda.gov) is an AngularJS front end over a
 # public, unauthenticated REST API. There is no bulk download offered on the
-# FDA website, but the API the app itself uses will return the whole catalogue,
+# FDA website, but the API the app itself uses will return the whole catalog,
 # so we call it directly rather than scraping the rendered pages.
 #
 # Two calls do the heavy lifting:
@@ -42,7 +42,7 @@ adafda_req <- function(path_suffix) {
     req_retry(max_tries = 4, backoff = ~ 2^.x)
 }
 
-# -- the whole catalogue in one POST ----------------------------------------
+# -- the whole catalog in one POST ----------------------------------------
 
 # The search form sends every field; nulls mean "unconstrained". Sending the
 # complete object (rather than just the fields we care about) matches what the
@@ -61,7 +61,7 @@ EMPTY_CRITERIA <- list(
 #' `...ForExcelPdf` is the endpoint behind the site's "export" button, so it
 #' ignores paging and returns the complete result set.
 fetch_catalogue <- function() {
-  message("Fetching application catalogue ...")
+  message("Fetching application catalog ...")
   body <- toJSON(EMPTY_CRITERIA, auto_unbox = TRUE, null = "null")
 
   resp <- adafda_req("advancedSearchForExcelPdf") |>

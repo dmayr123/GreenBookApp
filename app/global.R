@@ -109,7 +109,7 @@ GUIDELINE_MAX_AGE_YEARS <- 15
 #' rule that eventually lapses silently; this way the cutoff moves on its own
 #' every time the app starts.
 #'
-#' Rows with no `published` year are organisation hubs (AVMA's policy index,
+#' Rows with no `published` year are organization hubs (AVMA's policy index,
 #' AAHA's guidelines page). Those are continuously revised and carry no single
 #' publication date, so they are never expired by age.
 drop_expired_guidelines <- function(g, today = Sys.Date()) {
@@ -145,7 +145,7 @@ CATEGORIES <- c("NADA / Approved", "ANADA / Generic", "Conditional Approval",
 
 # -- display helpers ---------------------------------------------------------
 
-#' Badge colour for the collapsed product category.
+#' Badge color for the collapsed product category.
 category_class <- function(x) {
   case_when(
     x == "Conditional Approval"        ~ "cat-conditional",

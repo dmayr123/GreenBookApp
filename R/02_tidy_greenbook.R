@@ -12,7 +12,7 @@
 #   product_species  one row per product x species  (carries the use class)
 #   dosing           one row per product x indication  (dose + indication)
 #   documents        one row per downloadable FOI / label / SPL
-#   search_index     one row per product, denormalised, for the search box
+#   search_index     one row per product, denormalized, for the search box
 #
 # Free-text fields arrive as HTML fragments. We keep the HTML for display and
 # derive a plain-text twin for searching, because searching raw HTML makes
@@ -51,7 +51,7 @@ proc_dir <- function(...) path("data", "processed", ...)
 #' Write one processed table in both formats.
 #'
 #' Parquet is the archival copy -- compact, typed, and readable from Python or
-#' DuckDB if these tables are ever analysed outside this project.
+#' DuckDB if these tables are ever analyzed outside this project.
 #'
 #' RDS is what the app reads. Keeping a base-R-readable copy means `global.R`
 #' never has to mention `arrow`, which matters for the WebAssembly build:
@@ -119,7 +119,7 @@ decode_entities <- function(x) {
   str_replace_all(x, "[​-‍﻿]", "")
 }
 
-#' Strip HTML tags and normalise the quoting conventions FDA stores.
+#' Strip HTML tags and normalize the quoting conventions FDA stores.
 strip_html <- function(x) {
   x |>
     decode_fda_signs() |>
@@ -135,7 +135,7 @@ strip_html <- function(x) {
 
 #' Canonical form used for matching.
 #'
-#' This is the fix for the Green Book's worst search behaviour: on FDA's site
+#' This is the fix for the Green Book's worst search behavior: on FDA's site
 #' "CA-1", "-CA-1" and "CA1" are three different queries. Collapsing to
 #' lowercase alphanumerics makes them one. Trademark symbols, curly quotes and
 #' the trailing newlines FDA stores in its name fields all disappear here too.
@@ -169,7 +169,7 @@ CA_SUFFIX <- regex("-\\s*CA\\s*[0-9]+", ignore_case = TRUE)
 #' Identify conditionally approved applications.
 #'
 #' FDA's `applicationType` field cannot be trusted for this. It reports only 7
-#' of the 11 conditional approvals in the catalogue: CANALEVIA-CA1,
+#' of the 11 conditional approvals in the catalog: CANALEVIA-CA1,
 #' Varenzin-CA1, Credelio Quattro-CA1 and Baytril 100-CA1 are all typed "N"
 #' (full NADA) despite being conditional. That was confirmed three ways --
 #' the mandatory "-CA1" name suffix, FDA's own indication text ("Conditionally
@@ -308,7 +308,7 @@ extract_products <- function(bean, app_id) {
 
 #' Species map -> tidy rows.
 #'
-#' FDA keys this map as "Cattle:920", where the value is the labelled use
+#' FDA keys this map as "Cattle:920", where the value is the labeled use
 #' class for that species. We split the key and keep both halves: the name is
 #' what the user picks on the home page, the class is what qualifies it
 #' ("Beef calves 2 months of age and older").
@@ -435,7 +435,7 @@ read_spl <- function() {
 # -- build -------------------------------------------------------------------
 
 build_all <- function() {
-  catalogue <- read_catalogue()
+  catalog <- read_catalogue()
   beans     <- read_beans()
 
   ids <- as.integer(str_remove(path_file(names(beans)), "\\.json$"))
@@ -450,9 +450,9 @@ build_all <- function() {
   pioneers   <- map2_dfr(beans, ids, extract_pioneer)
   documents  <- bind_rows(documents, read_spl())
 
-  conditional <- detect_conditional(catalogue, products, dosing)
+  conditional <- detect_conditional(catalog, products, dosing)
 
-  applications <- catalogue |>
+  applications <- catalog |>
     select(applicationId, applicationNumber, applicationType,
            applicationStatusCode, publishDate, voluntaryWithdrawalDate) |>
     left_join(sponsors, by = "applicationId") |>
@@ -502,7 +502,7 @@ build_all <- function() {
     mutate(summaryText = strip_html(summaryHtml)) |>
     filter(!is.na(docId))
 
-  # One denormalised row per product drives the search box. Building it once
+  # One denormalized row per product drives the search box. Building it once
   # here keeps the app's reactive path to a single filter over a flat table.
   # Species groups collapse FDA's inconsistent labels (Equids vs Horses) onto
   # the tiles shown on the landing page.
@@ -514,23 +514,23 @@ build_all <- function() {
     left_join(ingredient_classes, by = "activeIngredientName",
               relationship = "many-to-many") |>
     group_by(applicationId) |>
-    summarise(drugClasses = paste(sort(unique(drugClass)), collapse = "; "),
+    summarize(drugClasses = paste(sort(unique(drugClass)), collapse = "; "),
               .groups = "drop")
 
   ing_by_app <- ingredients |>
     group_by(applicationId) |>
-    summarise(ingredients = paste(unique(activeIngredientName), collapse = "; "),
+    summarize(ingredients = paste(unique(activeIngredientName), collapse = "; "),
               .groups = "drop")
 
   sp_by_prod <- species |>
     group_by(proprietaryNameId) |>
-    summarise(speciesList   = paste(sort(unique(speciesName)),  collapse = "; "),
+    summarize(speciesList   = paste(sort(unique(speciesName)),  collapse = "; "),
               speciesGroups = paste(sort(unique(speciesGroup)), collapse = "; "),
               .groups = "drop")
 
   ind_by_prod <- dosing |>
     group_by(proprietaryNameId) |>
-    summarise(indications = paste(unique(indication), collapse = " | "),
+    summarize(indications = paste(unique(indication), collapse = " | "),
               .groups = "drop")
 
   search_index <- products |>
@@ -551,7 +551,7 @@ build_all <- function() {
         proprietaryName, ingredients, sponsorName, applicationNumber,
         doseFormName, speciesList, routes, indications, specifications
       )),
-      # Precomputed so scoring does not normalise the same three columns on
+      # Precomputed so scoring does not normalize the same three columns on
       # every keystroke. In WebAssembly, where R runs several times slower
       # than it does here, that work was a measurable part of each search.
       nameKey = norm_text(proprietaryName),

@@ -6,13 +6,13 @@
 # clinician actually wants, so it outranks a manufacturer's marketing page.
 #
 # Matching is harder than it looks. A trade name like "Meloxicam Injection"
-# returns a dozen DailyMed labels from a dozen labellers, and linking to the
+# returns a dozen DailyMed labels from a dozen labelers, and linking to the
 # wrong company's label would show the wrong strengths and the wrong
 # withdrawal times. Three rules are applied in descending confidence, and the
 # rule used is recorded on every row so the app can say how it was matched:
 #
-#   1. exact  -- the normalised trade name equals the label's name
-#   2. sponsor -- the stem matches and FDA's sponsor matches the SPL labeller.
+#   1. exact  -- the normalized trade name equals the label's name
+#   2. sponsor -- the stem matches and FDA's sponsor matches the SPL labeler.
 #                 This is the strong one: FDA tells us whose product it is.
 #   3. sole   -- the stem resolves to exactly one label, so there is nothing
 #                 to confuse it with
@@ -53,10 +53,10 @@ read_dailymed_cache <- function() {
         stem = stem,
         setid = e$setid,
         # "NAME (INGREDIENT) FORM [LABELLER]" -- name is everything before the
-        # first parenthesis, labeller is the trailing bracketed segment.
+        # first parenthesis, labeler is the trailing bracketed segment.
         splName = str_squish(str_remove(title, "\\s*\\(.*$")),
         # The dose form sits between the ingredient parenthesis and the
-        # labeller bracket: "NUFLOR (FLORFENICOL) INJECTION, SOLUTION [MERCK]".
+        # labeler bracket: "NUFLOR (FLORFENICOL) INJECTION, SOLUTION [MERCK]".
         splForm = str_squish(str_remove(
           str_extract(title, "(?<=\\))[^\\[]*") %||% "", "^\\s*")),
         splLabeler = str_squish(str_remove_all(
@@ -73,7 +73,7 @@ read_dailymed_cache <- function() {
 #' Companies that appear under different names in FDA's data and DailyMed's.
 #'
 #' Animal health businesses are bought and renamed constantly, so the sponsor
-#' FDA records and the labeller DailyMed records are often the same company
+#' FDA records and the labeler DailyMed records are often the same company
 #' written two ways -- Intervet's labels are filed by Merck, Fort Dodge's by
 #' Zoetis. Each row lists one company's aliases; membership of the same row
 #' counts as a match.
@@ -124,13 +124,13 @@ company_core <- function(name) {
   paste(words, collapse = "")
 }
 
-#' Do an FDA sponsor and a DailyMed labeller denote the same company?
+#' Do an FDA sponsor and a DailyMed labeler denote the same company?
 #'
 #' Compared on the identifying part of each name, because the same company is
 #' written "Huvepharma EOOD" and "Huvepharma, Inc (619153559)", then falling
 #' back to the alias table for renames and acquisitions.
 #'
-#' Takes raw names, not normalised keys, so the word boundaries needed to strip
+#' Takes raw names, not normalized keys, so the word boundaries needed to strip
 #' generic terms still exist.
 same_company <- function(sponsor, labeler) {
   s <- company_core(sponsor)
@@ -161,7 +161,7 @@ same_company <- function(sponsor, labeler) {
 #' intramuscularly is injectable whatever the form column says.
 #'
 #' The test is otherwise deliberately narrow: reject only on a clear
-#' contradiction, so vocabulary this function does not recognise costs no
+#' contradiction, so vocabulary this function does not recognize costs no
 #' matches.
 INJECTABLE_ROUTES <- paste(
   "intravenous", "intramuscular", "subcutaneous", "intraperitoneal",
@@ -207,7 +207,7 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
   # Application numbers read off each candidate label
   # (scripts/build_dailymed_appnumbers.R). This is the authoritative key: a
   # veterinary label cites the FDA application it was approved under, and that
-  # is the same number the Green Book is organised by.
+  # is the same number the Green Book is organized by.
   appnum_file <- file.path("data", "reference", "dailymed_appnumbers.csv")
   appnums <- if (file.exists(appnum_file)) {
     readr::read_csv(appnum_file, show_col_types = FALSE)
@@ -324,7 +324,7 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
     filter(.appMatch) |>
     pick("application number on the label")
 
-  # The labeller must correspond to FDA's sponsor even on an exact name match.
+  # The labeler must correspond to FDA's sponsor even on an exact name match.
   # DailyMed carries human labels too, and trade names collide across the two:
   # "Gastrografin" matched a Bracco Diagnostics human contrast agent for a
   # product FDA lists under Zoetis. Sending a vet to a human drug's label is
@@ -336,7 +336,7 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
     admissible() |>
     pick("exact trade name")
 
-  # FDA's sponsor and DailyMed's labeller are the same company written two
+  # FDA's sponsor and DailyMed's labeler are the same company written two
   # ways, so compare on a leading fragment rather than demanding equality:
   # "Norbrook Laboratories, Ltd." against "NORBROOK LABORATORIES LIMITED".
   by_sponsor <- p |>
@@ -344,7 +344,7 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
     anti_join(exact, by = "proprietaryNameId") |>
     inner_join(dm, by = "stem", relationship = "many-to-many") |>
     admissible() |>
-    pick("sponsor matches labeller")
+    pick("sponsor matches labeler")
 
   # A stem with only one label behind it still has to belong to the right
   # company, for the same reason.
