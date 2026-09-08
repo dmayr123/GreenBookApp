@@ -22,10 +22,10 @@ app_css <- "
 :root { --gb-ink:#1c2b33; --gb-accent:#0b6b5e; --gb-line:#dfe6e9; }
 body {
   background:#f6f8f9;
-  /* Single quotes: this whole stylesheet is a double-quoted R string, and a
-     double quote here ends it. That mistake shipped a file R could not parse,
-     which reached the browser as a blank page. */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+  /* Single quotes throughout this stylesheet: it is a double-quoted R string,
+     and a double quote here ends it. That mistake once shipped a file R could
+     not parse, which reached the browser as a blank page. */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
                'Helvetica Neue', Arial, sans-serif;
 }
 .gb-hero { padding: 2rem 0 1rem; }
@@ -70,6 +70,16 @@ body {
 .form-check-input:checked { background-color:var(--gb-accent);
   border-color:var(--gb-accent); }
 a { color:var(--gb-accent); }
+
+/* Bootstrap and reactable each set their own font stack; without this the
+   result table and the drug page keep the browser default while the rest of
+   the page uses Inter. The product names in the results list were the most
+   visible case. */
+body, .card, .rt-table, .rt-th, .rt-td, .btn, .form-control, .form-select,
+h1, h2, h3, h4, h5, h6, label, .modal-content {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'Helvetica Neue', Arial, sans-serif;
+}
 
 .muted { color:#8a969d; font-style:italic; }
 .update-line { display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap;
@@ -144,6 +154,18 @@ ui <- page_fluid(
   # the green Search button, which the stylesheet below sets directly.
   theme = bs_theme(version = 5),
   tags$head(
+    # Inter, loaded the way a web page loads a font: a stylesheet link the
+    # browser fetches. This is not font_google(), which downloads the font
+    # files inside R when the theme is built and needs curl -- that is what
+    # crashed the WebAssembly build. Nothing is fetched by R here, and if
+    # Google Fonts is unreachable the stack below falls back to the system
+    # font rather than failing.
+    tags$link(rel = "preconnect", href = "https://fonts.googleapis.com"),
+    tags$link(rel = "preconnect", href = "https://fonts.gstatic.com",
+              crossorigin = NA),
+    tags$link(rel = "stylesheet",
+              href = paste0("https://fonts.googleapis.com/css2",
+                            "?family=Inter:wght@400;500;600;700&display=swap")),
     tags$style(HTML(app_css)),
     tags$title("Green Book Drug Finder"),
     # Enter must run the search. A Shiny textInput is not inside a form, so it
@@ -282,7 +304,15 @@ home_ui <- function() {
 
 # -- results -----------------------------------------------------------------
 
-results_ui <- function(species_label) {
+#' The results page.
+#'
+#' Every control is seeded from the caller's saved state rather than from a
+#' fixed default. renderUI rebuilds this whole page each time the view
+#' changes, so a control that defaults to empty comes back empty: opening a
+#' drug and pressing "Back to results" discarded the search, the product-type
+#' filters and both toggles, and dumped the user into the full catalog. The
+#' state lives in the server and is passed back in here.
+results_ui <- function(species_label, state) {
   tagList(
     div(class = "d-flex align-items-center gap-2 mt-3 mb-2",
       actionLink("back_home", "← Home"),
@@ -292,17 +322,18 @@ results_ui <- function(species_label) {
     card(card_body(
       layout_columns(
         col_widths = c(5, 3, 4),
-        textInput("query", "Search", width = "100%",
+        textInput("query", "Search", width = "100%", value = state$query,
                   placeholder = "Trade name, ingredient, sponsor, application no."),
         selectInput("species_sel", "Species", width = "100%",
+                    selected = state$species,
                     choices = c("Any species" = "any",
                                 setNames(SPECIES_GROUPS$group, SPECIES_GROUPS$label))),
         checkboxGroupInput("cats", "Product type", inline = TRUE,
-                           choices = CATEGORIES, selected = CATEGORIES)
+                           choices = CATEGORIES, selected = state$cats)
       ),
       div(class = "d-flex gap-3",
-        checkboxInput("deep", "Also search indications and strengths", FALSE),
-        checkboxInput("withdrawn", "Include voluntarily withdrawn", FALSE)
+        checkboxInput("deep", "Also search indications and strengths", state$deep),
+        checkboxInput("withdrawn", "Include voluntarily withdrawn", state$withdrawn)
       )
     )),
     div(class = "mt-2 mb-2", textOutput("result_count")),
@@ -335,13 +366,31 @@ server <- function(input, output, session) {
   species   <- reactiveVal("any")   # sticky across views
   selected  <- reactiveVal(NULL)    # proprietaryNameId
 
+  # Search state, held outside the UI so it survives renderUI rebuilding the
+  # page. Kept in step with the controls by the observers below; the controls
+  # are seeded from it whenever the results page is drawn.
+  state <- reactiveValues(query = "", species = "any", cats = CATEGORIES,
+                          deep = FALSE, withdrawn = FALSE)
+
   output$page <- renderUI({
     switch(view(),
       home    = home_ui(),
-      results = results_ui(species_label()),
+      results = results_ui(species_label(), reactiveValuesToList(state)),
       detail  = detail_ui()
     )
   })
+
+  # ignoreNULL matters: while the results page is being torn down its inputs
+  # read NULL for a moment, and without this the saved state would be wiped by
+  # the very navigation it exists to survive.
+  observeEvent(input$query,     state$query     <- input$query,
+               ignoreInit = TRUE, ignoreNULL = TRUE)
+  observeEvent(input$cats,      state$cats      <- input$cats,
+               ignoreInit = TRUE, ignoreNULL = TRUE)
+  observeEvent(input$deep,      state$deep      <- input$deep,
+               ignoreInit = TRUE, ignoreNULL = TRUE)
+  observeEvent(input$withdrawn, state$withdrawn <- input$withdrawn,
+               ignoreInit = TRUE, ignoreNULL = TRUE)
 
   species_label <- reactive({
     g <- species()
@@ -361,17 +410,14 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$home_go, {
-    # Read the reactive here and close over the plain value: onFlushed()
-    # callbacks run outside the reactive context, so touching input$ or a
-    # reactiveVal inside one aborts the session.
-    q <- input$home_query %||% ""
+    # Set the saved state and let the results page seed itself from it. The
+    # previous version deferred an updateTextInput() until after the UI
+    # existed, which worked but only for this one control and only on this one
+    # path.
+    state$query <- input$home_query %||% ""
+    state$cats <- CATEGORIES
     species("any")
     view("results")
-    # Defer until the results UI exists, otherwise the input does not yet
-    # have a binding to receive the value.
-    session$onFlushed(function() {
-      updateTextInput(session, "query", value = q)
-    }, once = TRUE)
   })
 
   # -- monthly update report -------------------------------------------------
@@ -448,19 +494,11 @@ server <- function(input, output, session) {
   observeEvent(input$back_results, { view("results") })
 
   observeEvent(input$species_sel, { species(input$species_sel) },
-               ignoreInit = TRUE)
+               ignoreInit = TRUE, ignoreNULL = TRUE)
 
-  # Keep the dropdown showing whatever tile the user pressed. The species is
-  # captured here rather than read inside the callback, for the same reason
-  # as above.
-  observeEvent(view(), {
-    if (identical(view(), "results")) {
-      g <- species()
-      session$onFlushed(function() {
-        updateSelectInput(session, "species_sel", selected = g)
-      }, once = TRUE)
-    }
-  })
+  # The dropdown is seeded from `state$species` when the page is drawn, so it
+  # already shows whatever tile was pressed. This just keeps the two in step.
+  observeEvent(species(), { state$species <- species() })
 
   # -- results ---------------------------------------------------------------
 
@@ -469,16 +507,20 @@ server <- function(input, output, session) {
   # here, and several times that in the browser build, where R runs
   # interpreted WebAssembly. 250 ms is below the point a pause is noticeable
   # but long enough that a typed word costs one search instead of nine.
-  query_d <- debounce(reactive(input$query %||% ""), 250)
+  # Read from the saved state, not from the inputs. During navigation the
+  # inputs are momentarily NULL, and reading them directly briefly searched
+  # for nothing with no categories selected -- which is what flashed the whole
+  # catalog on the way back from a drug page.
+  query_d <- debounce(reactive(state$query %||% ""), 250)
 
   hits <- reactive({
     search_drugs(
       SEARCH_INDEX,
       query             = query_d(),
-      deep              = isTRUE(input$deep),
+      deep              = isTRUE(state$deep),
       species_group     = species(),
-      categories        = input$cats,
-      include_withdrawn = isTRUE(input$withdrawn)
+      categories        = state$cats,
+      include_withdrawn = isTRUE(state$withdrawn)
     )
   })
 
