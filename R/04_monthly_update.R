@@ -165,7 +165,7 @@ write_update_log <- function(diff, keep_months = 24, verified = FALSE) {
     arrange(desc(runDate), kind, applicationNumber)
 
   dir_create(proc_dir())
-  saveRDS(out, f, compress = "xz")
+  saveRDS(out, f, compress = "gzip")
 
   # Every run is recorded, including quiet ones, so the app can say "checked
   # on this date, nothing changed" rather than showing a stale month.
@@ -181,7 +181,7 @@ write_update_log <- function(diff, keep_months = 24, verified = FALSE) {
                      nConverted = nrow(conversions))) |>
     arrange(desc(runDate)) |>
     head(keep_months)
-  saveRDS(runs, rf, compress = "xz")
+  saveRDS(runs, rf, compress = "gzip")
 
   message(sprintf("Update log -> %s (%d rows this run)", f, nrow(new_rows)))
   invisible(out)

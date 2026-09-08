@@ -57,11 +57,16 @@ proc_dir <- function(...) path("data", "processed", ...)
 #' never has to mention `arrow`, which matters for the WebAssembly build:
 #' shinylive decides what to ship by scanning source for package references,
 #' so a single `requireNamespace("arrow")` in the app would add a large
-#' package to every visitor's download. xz compression is chosen because the
-#' cost is paid once here and saved on every page load.
+#' package to every visitor's download.
+#'
+#' gzip, not xz. xz compresses this data to 1.0 MB against gzip's 2.0 MB, but
+#' decompressing it needs liblzma, and an R built for the browser cannot be
+#' assumed to have it -- if it does not, every readRDS fails and the app dies
+#' with a blank page. gzip is always available, and measured slightly faster
+#' to read here. One megabyte is not worth that risk.
 write_table <- function(df, stem) {
   write_parquet(df, proc_dir(paste0(stem, ".parquet")))
-  saveRDS(df, proc_dir(paste0(stem, ".rds")), compress = "xz")
+  saveRDS(df, proc_dir(paste0(stem, ".rds")), compress = "gzip")
 }
 
 ADAFDA_PUBLIC <- "https://animaldrugsatfda.fda.gov/adafda/app/search/public"

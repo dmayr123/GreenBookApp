@@ -42,7 +42,7 @@ proc_dir  <- function(...) path("data", "processed", ...)
 #' WebAssembly build, where shinylive would otherwise ship it to every visitor.
 write_ndc <- function(df) {
   write_parquet(df, proc_dir("ndc.parquet"))
-  saveRDS(df, proc_dir("ndc.rds"), compress = "xz")
+  saveRDS(df, proc_dir("ndc.rds"), compress = "gzip")
 }
 
 norm_text <- function(x) {
