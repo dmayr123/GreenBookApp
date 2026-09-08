@@ -224,7 +224,7 @@ build_ndc_table <- function() {
   exact <- products |>
     inner_join(dm, by = c("stem", "nameKey" = "splKey"),
                relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorKey, labelerKey, same_company)) |>
+    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
     mutate(matchType = "exact name")
 
   # A stem-only match is trustworthy in exactly one case: when the stem
@@ -240,7 +240,7 @@ build_ndc_table <- function() {
   loose <- products |>
     anti_join(exact, by = "proprietaryNameId") |>
     inner_join(unambiguous, by = "stem", relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorKey, labelerKey, same_company)) |>
+    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
     mutate(matchType = "name stem (single label)")
 
   out <- bind_rows(exact, loose) |>

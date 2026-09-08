@@ -91,20 +91,53 @@ COMPANY_ALIASES <- list(
   c("dechra", "putney")
 )
 
+# Words that appear in company names without identifying the company. They are
+# removed before comparison: matching on a leading fragment paired
+# "Pharmaceutical Ventures, Ltd." with "AX Pharmaceutical Corp" on the shared
+# string "pharmac", and pointed a veterinary product at a human API supplier's
+# label.
+GENERIC_COMPANY_WORDS <- c(
+  "pharmaceuticals", "pharmaceutical", "laboratories", "laboratory", "labs",
+  "lab", "animal", "animals", "health", "healthcare", "veterinary", "vet",
+  "products", "product", "ventures", "group", "holdings", "international",
+  "incorporated", "corporation", "company", "limited", "inc", "llc", "ltd",
+  "corp", "co", "usa", "us", "gmbh", "ag", "bv", "as", "sa", "nv", "aps",
+  "eood", "ad", "spa", "srl", "kg", "plc", "division", "subsidiary"
+)
+
+#' The identifying part of a company name.
+#'
+#' Splits on the original word boundaries, drops the generic words, and
+#' rejoins. "Phibro Animal Health Corp." becomes "phibro"; "Pharmaceutical
+#' Ventures, Ltd." becomes nothing at all, which is the honest answer -- that
+#' name carries no distinctive token to match on.
+company_core <- function(name) {
+  words <- str_split(str_to_lower(coalesce(name, "")), "[^a-z0-9]+")[[1]]
+  words <- words[nzchar(words) & !words %in% GENERIC_COMPANY_WORDS]
+  # Registration numbers DailyMed appends are not identity either.
+  words <- words[!str_detect(words, "^[0-9]+$")]
+  paste(words, collapse = "")
+}
+
 #' Do an FDA sponsor and a DailyMed labeller denote the same company?
 #'
-#' Compares on a leading fragment, because the same company is written
-#' "Huvepharma EOOD" and "Huvepharma, Inc (619153559)", then falls back to the
-#' alias table for renames and acquisitions.
-same_company <- function(sponsor_key, labeler_key) {
-  if (is.na(sponsor_key) || is.na(labeler_key)) return(FALSE)
-  if (nchar(sponsor_key) < 4 || nchar(labeler_key) < 4) return(FALSE)
+#' Compared on the identifying part of each name, because the same company is
+#' written "Huvepharma EOOD" and "Huvepharma, Inc (619153559)", then falling
+#' back to the alias table for renames and acquisitions.
+#'
+#' Takes raw names, not normalised keys, so the word boundaries needed to strip
+#' generic terms still exist.
+same_company <- function(sponsor, labeler) {
+  s <- company_core(sponsor)
+  l <- company_core(labeler)
+  # No distinctive token on either side means no defensible match.
+  if (nchar(s) < 4 || nchar(l) < 4) return(FALSE)
 
-  if (str_detect(sponsor_key, fixed(substr(labeler_key, 1, 7))) ||
-      str_detect(labeler_key, fixed(substr(sponsor_key, 1, 7)))) return(TRUE)
+  if (str_detect(s, fixed(substr(l, 1, 7))) ||
+      str_detect(l, fixed(substr(s, 1, 7)))) return(TRUE)
 
   any(map_lgl(COMPANY_ALIASES, function(grp) {
-    any(str_detect(sponsor_key, grp)) && any(str_detect(labeler_key, grp))
+    any(str_detect(s, grp)) && any(str_detect(l, grp))
   }))
 }
 
@@ -138,7 +171,7 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
   exact <- p |>
     inner_join(dm, by = c("stem", "nameKey" = "splKey"),
                relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorKey, labelerKey, same_company)) |>
+    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
     pick("exact trade name")
 
   # FDA's sponsor and DailyMed's labeller are the same company written two
@@ -147,7 +180,7 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
   by_sponsor <- p |>
     anti_join(exact, by = "proprietaryNameId") |>
     inner_join(dm, by = "stem", relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorKey, labelerKey, same_company)) |>
+    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
     pick("sponsor matches labeller")
 
   # A stem with only one label behind it still has to belong to the right
@@ -157,7 +190,7 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
     anti_join(by_sponsor, by = "proprietaryNameId") |>
     inner_join(dm |> group_by(stem) |> filter(n_distinct(splKey) == 1) |> ungroup(),
                by = "stem", relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorKey, labelerKey, same_company)) |>
+    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
     pick("only label under this name")
 
   bind_rows(exact, by_sponsor, sole) |>
