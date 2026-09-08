@@ -1,7 +1,7 @@
 # Green Book Drug Finder
 
 An R/Shiny dashboard over FDA's **Approved Animal Drug Products (Green Book)**,
-built for practising veterinarians.
+built for practicing veterinarians.
 
 FDA publishes this data through [Animal Drugs @ FDA][adafda], but its search is
 hard to use: punctuation is significant (`CA-1`, `-CA-1` and `CA1` return
