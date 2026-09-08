@@ -40,6 +40,13 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Runners are UTC, so an evening deploy from Central time stamped the update log
+# with tomorrow's date -- the site read "checked 8 September" on the 7th. The
+# cron above stays UTC (GitHub schedules always are); this only governs the date
+# R writes into the log and shows in the app.
+env:
+  TZ: America/Chicago
+
 jobs:
   build:
     runs-on: ubuntu-latest

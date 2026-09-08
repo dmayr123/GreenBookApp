@@ -89,6 +89,10 @@ h1, h2, h3, h4, h5, h6, label, .modal-content {
 .update-line.has-changes { color:var(--gb-ink); }
 .update-line.has-changes .update-dot { background:var(--gb-accent); }
 .update-line strong { color:var(--gb-ink); }
+/* Set apart from the report link so the cadence reads as context, not a claim
+   about what changed. Single quotes: this is a double-quoted R string. */
+.update-line .update-next { color:#8a969d; font-size:.85rem;
+  padding-left:.55rem; border-left:1px solid #dfe5e8; }
 .update-tbl { width:100%; border-collapse:collapse; font-size:.88rem; }
 .update-tbl th { text-align:left; font-size:.7rem; text-transform:uppercase;
   letter-spacing:.08em; color:#7b8b94; padding:0 .8rem .4rem 0;
@@ -201,18 +205,38 @@ ui <- page_fluid(
 
 # -- home --------------------------------------------------------------------
 
+#' The date of the next scheduled refresh, given the date of the last one.
+#'
+#' The job runs on the 6th of each month, so this is simply the next 6th after
+#' `after`. Derived from the stored run date rather than from Sys.Date() so the
+#' whole banner is a property of the data: two people opening the site on
+#' different days see the same line, and it cannot drift on a stale build.
+next_check <- function(after) {
+  sixth <- as.Date(format(after, "%Y-%m-06"))
+  if (sixth > after) sixth else seq(sixth, by = "1 month", length.out = 2)[2]
+}
+
 #' The "what changed" line under the title.
 #'
 #' Shows the headline counts from the most recent refresh and opens the full
 #' report. A quiet month still says so with its date, because "checked on the
 #' 6th, nothing changed" is information -- silence would be indistinguishable
 #' from the update having stopped running.
+#'
+#' The date alone was read as "this updates daily" -- it is stored, not
+#' computed, and only moves when the pipeline runs. Naming the next check makes
+#' the monthly cadence visible, so a reader can tell current from stale without
+#' knowing the schedule.
 update_banner <- function() {
   run <- latest_run()
   if (is.null(run)) return(NULL)
 
   total <- run$nAdded + run$nChanged + run$nWithdrawn + run$nConverted
   when <- format(run$runDate, "%d %B %Y")
+
+  nxt  <- next_check(run$runDate)
+  nxt_txt <- format(nxt, if (format(nxt, "%Y") == format(run$runDate, "%Y"))
+                           "%d %B" else "%d %B %Y")
 
   bits <- c(
     if (run$nConverted > 0) sprintf("%d conditional → full approval", run$nConverted),
@@ -231,7 +255,8 @@ update_banner <- function() {
     } else {
       tagList(sprintf("Checked %s — no drug changes this month. ", when),
               actionLink("show_update", "See update history"))
-    }
+    },
+    span(class = "update-next", sprintf("Next check %s", nxt_txt))
   )
 }
 
