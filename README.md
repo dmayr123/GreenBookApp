@@ -6,7 +6,7 @@ built for practicing veterinarians.
 FDA publishes this data through [Animal Drugs @ FDA][adafda], but its search is
 hard to use: punctuation is significant (`CA-1`, `-CA-1` and `CA1` return
 different results), multi-word queries are treated as one literal string, and
-results come back unranked. This app fixes those three things and reorganises
+results come back unranked. This app fixes those three things and reorganizes
 the data around the question a vet actually asks — *what is approved for this
 species, and what does the label say?*
 
