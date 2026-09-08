@@ -31,6 +31,19 @@ library(arrow)
 source("R/species_taxonomy.R")
 source("R/drug_classes.R")
 source("R/label_sources.R")
+source("R/label_dailymed.R")
+
+#' The distinctive first word of a trade name, used to look products up in the
+#' cached DailyMed results. Mirrors search_stem() in 03_ndc_dailymed.R; kept
+#' here so the tidy step does not have to source the network-facing script.
+label_stem <- function(name) {
+  name |>
+    str_remove_all("[®™©]") |>
+    str_remove_all("(?i)[-\\s]*CA[-\\s]?[0-9]+\\s*$") |>
+    str_squish() |>
+    str_split("\\s+") |> map_chr(~ .x[1]) |>
+    str_remove_all("[^A-Za-z0-9]")
+}
 
 raw_dir  <- function(...) path("data", "raw", ...)
 proc_dir <- function(...) path("data", "processed", ...)
@@ -563,7 +576,14 @@ build_all <- function() {
   } else {
     tibble(proprietaryNameId = integer(), setid = character())
   }
-  label_links <- build_label_links(products, applications, documents, ndc_tbl)
+  # The DailyMed label match reuses the cache the NDC crawl already built, so
+  # it costs no extra requests. Absent cache degrades to search links.
+  dm_labels <- tryCatch(
+    resolve_dailymed_labels(products, applications, label_stem),
+    error = function(e) NULL)
+
+  label_links <- build_label_links(products, applications, documents, ndc_tbl,
+                                   dailymed_labels = dm_labels)
 
   dir_create(proc_dir())
   # Precomputed once here rather than re-running ~60 regexes on every drug

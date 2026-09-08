@@ -170,8 +170,11 @@ lookup_name <- function(stem) {
       setid     = e$setid,
       splTitle  = e$title,
       # The DailyMed title is "NAME (INGREDIENT) FORM [LABELLER]"; the trade
-      # name is everything before the first parenthesis.
+      # name is everything before the first parenthesis and the labeller is
+      # the trailing bracketed segment.
       splName   = str_squish(str_remove(e$title, "\\s*\\(.*$")),
+      splLabeler = str_squish(str_remove_all(
+        str_extract(e$title, "\\[[^]]*\\]$") %||% "", "[\\[\\]]")),
       ndc       = if (length(ndcs)) ndcs else NA_character_
     )
   })
@@ -181,10 +184,21 @@ lookup_name <- function(stem) {
 
 #' Build the product -> NDC table.
 build_ndc_table <- function() {
+  # same_company(): DailyMed carries human labels alongside veterinary ones,
+  # and trade names collide across the two. Matching on name alone attached a
+  # Bracco Diagnostics human contrast agent's NDC codes to a Zoetis
+  # veterinary product. The labeller must correspond to FDA's sponsor.
+  source("R/label_dailymed.R", local = TRUE)
+
   products <- read_parquet(proc_dir("products.parquet"))
+  applications <- read_parquet(proc_dir("applications.parquet"))
+
   products <- products |>
+    left_join(applications |> select(applicationId, sponsorName),
+              by = "applicationId") |>
     mutate(stem = search_stem(proprietaryName),
-           nameKey = norm_text(proprietaryName))
+           nameKey = norm_text(proprietaryName),
+           sponsorKey = norm_text(sponsorName))
 
   stems <- unique(products$stem)
   stems <- stems[!is.na(stems) & nzchar(stems)]
@@ -202,12 +216,15 @@ build_ndc_table <- function() {
     return(invisible(out))
   }
 
-  dm <- mutate(dm, splKey = norm_text(splName))
+  dm <- mutate(dm, splKey = norm_text(splName),
+                   labelerKey = norm_text(splLabeler))
 
-  # An exact normalised name match is trustworthy.
+  # An exact name match is trustworthy only when the labeller is also the
+  # sponsor FDA recorded.
   exact <- products |>
     inner_join(dm, by = c("stem", "nameKey" = "splKey"),
                relationship = "many-to-many") |>
+    filter(map2_lgl(sponsorKey, labelerKey, same_company)) |>
     mutate(matchType = "exact name")
 
   # A stem-only match is trustworthy in exactly one case: when the stem
@@ -223,6 +240,7 @@ build_ndc_table <- function() {
   loose <- products |>
     anti_join(exact, by = "proprietaryNameId") |>
     inner_join(unambiguous, by = "stem", relationship = "many-to-many") |>
+    filter(map2_lgl(sponsorKey, labelerKey, same_company)) |>
     mutate(matchType = "name stem (single label)")
 
   out <- bind_rows(exact, loose) |>

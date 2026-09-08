@@ -1,13 +1,17 @@
 # ---------------------------------------------------------------------------
 # label_sources.R -- resolve a product label link for every drug
 #
-# Search order, in the order a veterinarian would trust the source:
+# Search order. The actual label comes first, because that is what a
+# prescriber is looking for -- a manufacturer's product page is a route to the
+# label at best, and marketing copy at worst:
 #
-#   1. the manufacturer's own website
-#   2. the Structured Product Label -- the labeller's full approved label
-#   3. other FDA-published labelling (Blue Bird label, FDA-hosted labelling)
-#   4. the FDA FOI summary
-#   5. a DailyMed search by trade name, when nothing above is on file
+#   1. the Structured Product Label on DailyMed -- the approved label itself,
+#      the package insert content
+#   2. other FDA-published labelling (Blue Bird label, FDA-hosted labelling)
+#   3. the manufacturer's own page for this product
+#   4. the manufacturer's catalogue, when they publish no per-product page
+#   5. the FDA FOI summary
+#   6. a DailyMed search by trade name, when nothing above is on file
 #
 # Actual labelling outranks the FOI summary deliberately. An **FOI summary is
 # not the product label**: it is FDA's freedom-of-information summary of the
@@ -93,12 +97,45 @@ DAILYMED_SEARCH <- "https://dailymed.nlm.nih.gov/dailymed/search.cfm?query="
 #'
 #' @return columns: proprietaryNameId, tier, sourceName, citation, whatItIs,
 #'   url, link_status. Lower `tier` is preferred.
-build_label_links <- function(products, applications, documents, ndc) {
+build_label_links <- function(products, applications, documents, ndc,
+                              dailymed_labels = NULL) {
 
   prod <- products |>
     select(proprietaryNameId, applicationId, proprietaryName)
 
-  # -- tier 1: the manufacturer's own page for THIS product --------------------
+  # -- tier 1: the approved label itself ---------------------------------------
+  #
+  # Resolved by R/label_dailymed.R, which records how each match was made.
+  # `ndc` still contributes its setids: those came from an exact-name or
+  # single-label match during the NDC crawl and are equally trustworthy.
+  dm_lab <- if (!is.null(dailymed_labels) && nrow(dailymed_labels) > 0) {
+    dailymed_labels |> select(proprietaryNameId, setid, matchBasis)
+  } else {
+    tibble(proprietaryNameId = integer(), setid = character(),
+           matchBasis = character())
+  }
+
+  dm_lab <- bind_rows(
+    dm_lab,
+    ndc |> distinct(proprietaryNameId, setid) |> filter(!is.na(setid)) |>
+      mutate(matchBasis = "matched via NDC")
+  ) |>
+    distinct(proprietaryNameId, .keep_all = TRUE)
+
+  dm_exact <- prod |>
+    inner_join(dm_lab, by = "proprietaryNameId") |>
+    transmute(
+      proprietaryNameId, tier = 1L,
+      sourceName = "Product label (DailyMed)",
+      citation   = "DailyMed, U.S. National Library of Medicine",
+      whatItIs   = paste0(
+        "The approved label and package insert for this product — matched by ",
+        matchBasis),
+      url = paste0("https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=", setid),
+      link_status = "verified"
+    )
+
+  # -- tier 3: the manufacturer's own page for THIS product ---------------
   #
   # Resolved from manufacturer sitemaps and verified page by page
   # (scripts/build_manufacturer_links.R). Only some manufacturers publish
@@ -117,53 +154,33 @@ build_label_links <- function(products, applications, documents, ndc) {
     inner_join(product_pages |> select(proprietaryNameId, manufacturer, url),
                by = "proprietaryNameId") |>
     transmute(
-      proprietaryNameId, tier = 1L,
+      proprietaryNameId, tier = 3L,
       sourceName = paste0(manufacturer, " — product page"),
       citation   = paste0(manufacturer, " (manufacturer)"),
       whatItIs   = "The manufacturer's own page for this product, with its label and prescribing information",
       url, link_status = "verified"
     )
 
-  # -- tier 1b: manufacturer catalogue, when no product page was found ---------
+  # -- tier 4: manufacturer catalogue, when no product page exists ---------
   man <- prod |>
     anti_join(man_page, by = "proprietaryNameId") |>
     inner_join(match_manufacturer(applications), by = "applicationId") |>
     transmute(
-      proprietaryNameId, tier = 1L,
+      proprietaryNameId, tier = 4L,
       sourceName = manufacturer,
       citation   = paste0(manufacturer, " (manufacturer)"),
       whatItIs   = "Manufacturer's product catalogue — this manufacturer does not publish a direct link to each product",
       url, link_status
     )
 
-  # -- tier 2: the labeller's own approved label -------------------------------
-  #
-  # The DailyMed page renders the Structured Product Label submitted by the
-  # labeller: the complete current label, including indications, dosing and
-  # withdrawal periods. It needs an exact setid, which comes from the NDC
-  # match; a trade-name search is the tier-5 fallback when there is none.
-  dm_exact <- prod |>
-    inner_join(ndc |> distinct(proprietaryNameId, setid) |>
-                 filter(!is.na(setid)) |>
-                 group_by(proprietaryNameId) |> slice(1) |> ungroup(),
-               by = "proprietaryNameId") |>
-    transmute(
-      proprietaryNameId, tier = 2L,
-      sourceName = "Product label (DailyMed)",
-      citation   = "DailyMed, U.S. National Library of Medicine",
-      whatItIs   = "The labeller's Structured Product Label — the full approved label",
-      url = paste0("https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=", setid),
-      link_status = "verified"
-    )
-
-  # -- tier 3: other FDA-published labelling -----------------------------------
+  # -- tier 2: other FDA-published labelling -------------------------------
   fda_lbl <- prod |>
     inner_join(documents |> filter(docType == "Product Label") |>
                  group_by(applicationId) |> slice(1) |> ungroup() |>
                  select(applicationId, url),
                by = "applicationId") |>
     transmute(
-      proprietaryNameId, tier = 3L,
+      proprietaryNameId, tier = 2L,
       sourceName = "Product label (FDA)",
       citation   = "U.S. FDA, Animal Drugs @ FDA",
       whatItIs   = "Labelling published by FDA for this application",
@@ -176,14 +193,14 @@ build_label_links <- function(products, applications, documents, ndc) {
                  select(applicationId, url),
                by = "applicationId") |>
     transmute(
-      proprietaryNameId, tier = 3L,
+      proprietaryNameId, tier = 2L,
       sourceName = "Blue Bird label",
       citation   = "U.S. FDA, Animal Drugs @ FDA",
       whatItIs   = "FDA-published label for a medicated feed",
       url, link_status = "verified"
     )
 
-  # -- tier 4: FOI summary -----------------------------------------------------
+  # -- tier 5: FOI summary -------------------------------------------------
   #
   # Ranked below real labelling: this is the basis-of-approval summary, not a
   # document to check a dose against.
@@ -193,18 +210,18 @@ build_label_links <- function(products, applications, documents, ndc) {
                  select(applicationId, url),
                by = "applicationId") |>
     transmute(
-      proprietaryNameId, tier = 4L,
+      proprietaryNameId, tier = 5L,
       sourceName = "FDA FOI summary",
       citation   = "U.S. FDA, Animal Drugs @ FDA",
       whatItIs   = "FDA freedom-of-information approval summary — not the label itself",
       url, link_status = "verified"
     )
 
-  # -- tier 5: fallback search -------------------------------------------------
+  # -- tier 6: fallback search ---------------------------------------------
   dm_search <- prod |>
     anti_join(dm_exact, by = "proprietaryNameId") |>
     transmute(
-      proprietaryNameId, tier = 5L,
+      proprietaryNameId, tier = 6L,
       sourceName = "Search DailyMed",
       citation   = "DailyMed, U.S. National Library of Medicine",
       whatItIs   = "Label search by trade name — no exact label match on file",
