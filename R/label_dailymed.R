@@ -156,10 +156,58 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
            nameKey = dm_norm(proprietaryName),
            sponsorKey = dm_norm(sponsorName))
 
+  #' Choose the closest label when a product matches several.
+  #'
+  #' One brand can carry separate labels per species: Zoetis publishes both
+  #' "EXCEDE STERILE" (cattle and horses) and "EXCEDE FOR SWINE STERILE". Both
+  #' share the stem and the sponsor, so both survive the earlier filters, and
+  #' taking whichever came first gave the cattle and horse product the swine
+  #' label -- different withdrawal times, different species entirely.
+  #'
+  #' Candidates are ranked by edit distance between the full trade name and
+  #' the label name, so "EXCEDE" prefers "EXCEDE STERILE" over "EXCEDE FOR
+  #' SWINE STERILE". A tie means the evidence does not distinguish them, and
+  #' the product is left with no direct label rather than a guessed one.
+  #' Rank by prefix containment, then by how much the label name adds.
+  #'
+  #' Edit distance is the wrong metric here: it rewards short strings, so
+  #' "EXCEDE STERILE" scored better than "EXCEDE FOR SWINE STERILE" for the
+  #' swine product purely by being shorter. What actually identifies a label
+  #' is that the trade name is a *prefix* of the label name, DailyMed titles
+  #' being the trade name followed by dose form.
+  #'
+  #' Rank 0 -- the trade name begins the label name ("EXCEDE FOR SWINE"
+  #'           within "EXCEDE FOR SWINE STERILE"). Among these the label that
+  #'           adds least wins, so plain "EXCEDE" takes "EXCEDE STERILE"
+  #'           rather than the swine label.
+  #' Rank 1 -- the label name begins the trade name, for names FDA records
+  #'           more fully than DailyMed does.
+  #' Rank 2 -- neither; the weakest evidence.
   pick <- function(df, basis) {
     if (nrow(df) == 0) return(empty)
     df |>
-      group_by(proprietaryNameId) |> slice(1) |> ungroup() |>
+      mutate(
+        .lab = dm_norm(splName),
+        .rank = case_when(
+          str_starts(.lab, fixed(nameKey))  ~ 0L,
+          str_starts(nameKey, fixed(.lab))  ~ 1L,
+          TRUE                              ~ 2L),
+        .extra = abs(nchar(.lab) - nchar(nameKey))
+      ) |>
+      group_by(proprietaryNameId) |>
+      # Two separate filters, deliberately. Combining them into one call
+      # evaluates both minima over the unfiltered group, so a candidate that
+      # wins on rank but not on length is discarded alongside one that wins on
+      # length but not rank -- which dropped both Excede labels and left the
+      # swine product with none. Filtering by rank first makes min(.extra)
+      # recompute over the survivors.
+      filter(.rank == min(.rank)) |>
+      filter(.extra == min(.extra)) |>
+      # Still more than one candidate: the evidence does not separate them, so
+      # leave the product without a direct label rather than guess a species.
+      filter(n_distinct(setid) == 1) |>
+      slice(1) |>
+      ungroup() |>
       transmute(proprietaryNameId, setid, splName, matchBasis = basis)
   }
 
