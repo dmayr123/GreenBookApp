@@ -22,8 +22,11 @@ app_css <- "
 :root { --gb-ink:#1c2b33; --gb-accent:#0b6b5e; --gb-line:#dfe6e9; }
 body {
   background:#f6f8f9;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-               "Helvetica Neue", Arial, sans-serif;
+  /* Single quotes: this whole stylesheet is a double-quoted R string, and a
+     double quote here ends it. That mistake shipped a file R could not parse,
+     which reached the browser as a blank page. */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'Helvetica Neue', Arial, sans-serif;
 }
 .gb-hero { padding: 2rem 0 1rem; }
 .gb-hero h1 { font-weight: 700; letter-spacing:-.02em; color:var(--gb-ink); }

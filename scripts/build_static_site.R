@@ -66,6 +66,28 @@ for (f in rds) {
 file_copy("data/reference/guidelines.csv",
           path(BUILD, "data", "reference"), overwrite = TRUE)
 
+# -- refuse to ship code that does not parse ---------------------------------
+#
+# A stray double quote inside the stylesheet -- which is itself a
+# double-quoted R string -- made app.R unparseable. shinylive packaged it
+# without complaint, the browser failed with "Error sourcing app.R", and the
+# visitor saw a blank page. The build had reported success throughout.
+#
+# Parsing is the cheapest possible check and catches the whole class.
+message("  checking every bundled R file parses ...")
+bad <- character()
+for (rf in dir_ls(BUILD, recurse = TRUE, glob = "*.R")) {
+  ok <- tryCatch({ parse(rf, encoding = "UTF-8"); TRUE },
+                 error = function(e) { bad <<- c(bad, paste0(path_file(rf), ": ",
+                                                             conditionMessage(e))); FALSE })
+}
+if (length(bad)) {
+  stop("Refusing to build: these files do not parse.\n  ",
+       paste(bad, collapse = "\n  "),
+       "\nFix them and rebuild; shipping them produces a blank page.")
+}
+message(glue("  {length(dir_ls(BUILD, recurse = TRUE, glob = '*.R'))} R files parse"))
+
 payload <- sum(file_info(dir_ls(BUILD, recurse = TRUE, type = "file"))$size)
 message(glue("  bundled payload: {prettyunits::pretty_bytes(payload)}"))
 
