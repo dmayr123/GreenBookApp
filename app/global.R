@@ -14,13 +14,11 @@ library(stringr)
 library(tidyr)
 library(purrr)
 library(reactable)
-library(readr)
-library(fs)
 
 # The app lives in app/, the pipeline and data live one level up. Resolving
 # the project root here means the app runs whether it is launched from the
 # project root or from inside app/.
-APP_ROOT <- if (dir_exists("R") && dir_exists("data")) "." else ".."
+APP_ROOT <- if (dir.exists("R") && dir.exists("data")) "." else ".."
 
 src  <- function(f) source(file.path(APP_ROOT, "R", f), local = FALSE)
 proc <- function(f) file.path(APP_ROOT, "data", "processed", f)
@@ -129,7 +127,7 @@ drop_expired_guidelines <- function(g, today = Sys.Date()) {
 }
 
 GUIDELINES <- if (file.exists(ref("guidelines.csv"))) {
-  read_csv(ref("guidelines.csv"), show_col_types = FALSE) |>
+  read.csv(ref("guidelines.csv"), stringsAsFactors = FALSE) |>
     drop_expired_guidelines()
 } else {
   tibble(match_type = character(), match_value = character(),
@@ -138,7 +136,9 @@ GUIDELINES <- if (file.exists(ref("guidelines.csv"))) {
          link_status = character(), note = character())
 }
 
-DATA_BUILT <- format(file.info(proc("search_index.parquet"))$mtime, "%d %b %Y")
+# Read from the RDS, not the parquet: the static build ships only RDS, so
+# pointing at the parquet gave the published site an NA build date.
+DATA_BUILT <- format(file.info(proc("search_index.rds"))$mtime, "%d %b %Y")
 
 CATEGORIES <- c("NADA / Approved", "ANADA / Generic", "Conditional Approval",
                 "Emergency Use Authorization")

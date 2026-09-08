@@ -20,7 +20,11 @@ source("global.R", local = FALSE)
 
 app_css <- "
 :root { --gb-ink:#1c2b33; --gb-accent:#0b6b5e; --gb-line:#dfe6e9; }
-body { background:#f6f8f9; }
+body {
+  background:#f6f8f9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+}
 .gb-hero { padding: 2rem 0 1rem; }
 .gb-hero h1 { font-weight: 700; letter-spacing:-.02em; color:var(--gb-ink); }
 .gb-sub { color:#5a6b74; max-width: 46rem; }
@@ -114,7 +118,13 @@ body { background:#f6f8f9; }
 "
 
 ui <- page_fluid(
-  theme = bs_theme(version = 5, primary = "#0b6b5e", base_font = font_google("Inter")),
+  # No web font. font_google() *downloads* the font files when the theme is
+  # built, which needs curl -- and the WebAssembly build has no curl, so the
+  # app died on startup with "Downloading Google Font files requires either
+  # the curl package or capabilities('libcurl')". A system font stack costs
+  # nothing to fetch, cannot fail, and renders the same on every platform a
+  # vet is likely to use.
+  theme = bs_theme(version = 5, primary = "#0b6b5e"),
   tags$head(
     tags$style(HTML(app_css)),
     tags$title("Green Book Drug Finder"),
