@@ -173,6 +173,10 @@ lookup_name <- function(stem) {
       # name is everything before the first parenthesis and the labeller is
       # the trailing bracketed segment.
       splName   = str_squish(str_remove(e$title, "\\s*\\(.*$")),
+      # Dose form sits between the ingredient parenthesis and the labeller
+      # bracket, and is what keeps an injectable label's NDC codes off a
+      # medicated feed article.
+      splForm   = str_squish(str_extract(e$title, "(?<=\\))[^\\[]*") %||% ""),
       splLabeler = str_squish(str_remove_all(
         str_extract(e$title, "\\[[^]]*\\]$") %||% "", "[\\[\\]]")),
       ndc       = if (length(ndcs)) ndcs else NA_character_
@@ -224,7 +228,8 @@ build_ndc_table <- function() {
   exact <- products |>
     inner_join(dm, by = c("stem", "nameKey" = "splKey"),
                relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
+    filter(map2_lgl(sponsorName, splLabeler, same_company),
+           pmap_lgl(list(doseFormName, routes, splForm), compatible_form)) |>
     mutate(matchType = "exact name")
 
   # A stem-only match is trustworthy in exactly one case: when the stem
@@ -240,7 +245,8 @@ build_ndc_table <- function() {
   loose <- products |>
     anti_join(exact, by = "proprietaryNameId") |>
     inner_join(unambiguous, by = "stem", relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
+    filter(map2_lgl(sponsorName, splLabeler, same_company),
+           pmap_lgl(list(doseFormName, routes, splForm), compatible_form)) |>
     mutate(matchType = "name stem (single label)")
 
   out <- bind_rows(exact, loose) |>

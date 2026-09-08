@@ -122,6 +122,31 @@ build_label_links <- function(products, applications, documents, ndc,
   ) |>
     distinct(proprietaryNameId, .keep_all = TRUE)
 
+  # Final gate, applied to every candidate whatever produced it. The NDC table
+  # is matched separately and by name, so without this a label that states it
+  # belongs to a different application still reached the page: the Nuflor
+  # cattle injection label (NADA 141-063) sat on the swine Type A medicated
+  # article (NADA 141-264). A label that names its application is only ever
+  # that application's label.
+  appnum_file <- file.path("data", "reference", "dailymed_appnumbers.csv")
+  if (file.exists(appnum_file)) {
+    appnums <- readr::read_csv(appnum_file, show_col_types = FALSE)
+    dm_lab <- dm_lab |>
+      left_join(products |> select(proprietaryNameId, applicationId),
+                by = "proprietaryNameId") |>
+      left_join(applications |> select(applicationId, applicationNumber),
+                by = "applicationId") |>
+      left_join(appnums, by = "setid") |>
+      mutate(
+        .known = !is.na(appNumbers) & nzchar(coalesce(appNumbers, "")),
+        .mine  = sprintf("%06d", as.integer(applicationNumber)),
+        .match = .known & purrr::map2_lgl(appNumbers, .mine,
+                                          ~ .y %in% strsplit(.x, "\\|")[[1]])
+      ) |>
+      filter(!.known | .match) |>
+      select(proprietaryNameId, setid, matchBasis)
+  }
+
   dm_exact <- prod |>
     inner_join(dm_lab, by = "proprietaryNameId") |>
     transmute(

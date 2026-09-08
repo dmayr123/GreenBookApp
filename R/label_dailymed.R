@@ -38,6 +38,7 @@ dm_norm <- function(x) str_replace_all(tolower(coalesce(x, "")), "[^a-z0-9]+", "
 read_dailymed_cache <- function() {
   if (!dir_exists(DM_CACHE)) return(tibble(
     stem = character(), setid = character(), splName = character(),
+    splForm = character(), splLabeler = character(),
     splKey = character(), labelerKey = character()))
 
   files <- dir_ls(DM_CACHE, glob = "*.json")
@@ -54,6 +55,10 @@ read_dailymed_cache <- function() {
         # "NAME (INGREDIENT) FORM [LABELLER]" -- name is everything before the
         # first parenthesis, labeller is the trailing bracketed segment.
         splName = str_squish(str_remove(title, "\\s*\\(.*$")),
+        # The dose form sits between the ingredient parenthesis and the
+        # labeller bracket: "NUFLOR (FLORFENICOL) INJECTION, SOLUTION [MERCK]".
+        splForm = str_squish(str_remove(
+          str_extract(title, "(?<=\\))[^\\[]*") %||% "", "^\\s*")),
         splLabeler = str_squish(str_remove_all(
           str_extract(title, "\\[[^]]*\\]$") %||% "", "[\\[\\]]"))
       )
@@ -141,6 +146,57 @@ same_company <- function(sponsor, labeler) {
   }))
 }
 
+#' Is a label's dose form compatible with the product's?
+#'
+#' Merck files two Nuflor labels, and FDA lists five Nuflor products. A Type A
+#' medicated article for swine and a concentrate solution both matched the
+#' cattle injection label on name alone, which put an injectable label -- with
+#' its route, its dose and its withdrawal period -- on a product mixed into
+#' feed.
+#'
+#' Whether a product is injectable is decided from its route, not its dose
+#' form. FDA's dose-form wording is inconsistent -- Excede is recorded as
+#' "Sterile suspension" with no mention of injection -- so testing the form
+#' text rejected correct matches. The route is unambiguous: a product given
+#' intramuscularly is injectable whatever the form column says.
+#'
+#' The test is otherwise deliberately narrow: reject only on a clear
+#' contradiction, so vocabulary this function does not recognise costs no
+#' matches.
+INJECTABLE_ROUTES <- paste(
+  "intravenous", "intramuscular", "subcutaneous", "intraperitoneal",
+  "intra-?articular", "intra-?lesional", "intracardiac", "epidural",
+  "intramammary", "intrauterine", sep = "|")
+
+compatible_form <- function(product_form, product_routes, label_form) {
+  if (is.na(label_form) || !nzchar(coalesce(label_form, ""))) return(TRUE)
+  lf <- str_to_lower(label_form)
+
+  # An injectable label belongs only on an injectable product, and vice versa.
+  routes <- str_to_lower(coalesce(product_routes, ""))
+  if (nzchar(routes)) {
+    if (str_detect(lf, "inject") != str_detect(routes, INJECTABLE_ROUTES)) {
+      return(FALSE)
+    }
+  }
+
+  if (is.na(product_form) || !nzchar(coalesce(product_form, ""))) return(TRUE)
+  pf <- str_to_lower(product_form)
+
+  # A feed article is not a tablet, a capsule or an ointment.
+  feed <- str_detect(pf, "type a|type b|type c|medicated feed|premix")
+  if (feed && str_detect(lf, "tablet|capsule|ointment|cream|suppositor")) {
+    return(FALSE)
+  }
+
+  # An oral solid is not a topical preparation.
+  if (str_detect(pf, "tablet|capsule|bolus") &&
+      str_detect(lf, "ointment|cream|shampoo|otic|ophthalmic|topical")) {
+    return(FALSE)
+  }
+  TRUE
+}
+
 #' Product -> DailyMed label, with the matching rule recorded.
 resolve_dailymed_labels <- function(products, applications, stem_of) {
   dm <- read_dailymed_cache()
@@ -148,13 +204,26 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
                   splName = character(), matchBasis = character())
   if (nrow(dm) == 0) return(empty)
 
+  # Application numbers read off each candidate label
+  # (scripts/build_dailymed_appnumbers.R). This is the authoritative key: a
+  # veterinary label cites the FDA application it was approved under, and that
+  # is the same number the Green Book is organised by.
+  appnum_file <- file.path("data", "reference", "dailymed_appnumbers.csv")
+  appnums <- if (file.exists(appnum_file)) {
+    readr::read_csv(appnum_file, show_col_types = FALSE)
+  } else {
+    tibble(setid = character(), appNumbers = character())
+  }
+  dm <- dm |> left_join(appnums, by = "setid")
+
   p <- products |>
-    select(proprietaryNameId, applicationId, proprietaryName) |>
-    left_join(applications |> select(applicationId, sponsorName),
+    select(proprietaryNameId, applicationId, proprietaryName, doseFormName, routes) |>
+    left_join(applications |> select(applicationId, sponsorName, applicationNumber),
               by = "applicationId") |>
     mutate(stem = stem_of(proprietaryName),
            nameKey = dm_norm(proprietaryName),
-           sponsorKey = dm_norm(sponsorName))
+           sponsorKey = dm_norm(sponsorName),
+           appPadded = sprintf("%06d", as.integer(applicationNumber)))
 
   #' Choose the closest label when a product matches several.
   #'
@@ -211,36 +280,83 @@ resolve_dailymed_labels <- function(products, applications, stem_of) {
       transmute(proprietaryNameId, setid, splName, matchBasis = basis)
   }
 
+  #' Every filter that must hold before a label can be considered.
+  #'
+  #' The application-number test is the decisive one. Where a label states
+  #' which application it belongs to and that is not this product's, it is not
+  #' this product's label however well the names agree -- which is what put
+  #' the Nuflor cattle injection label on the swine medicated article. Labels
+  #' that cite no application number (42 of 669) fall back to the name,
+  #' company and dose-form evidence.
+  admissible <- function(df) {
+    df |>
+      mutate(
+        .appKnown = !is.na(appNumbers) & nzchar(coalesce(appNumbers, "")),
+        .appMatch = .appKnown & map2_lgl(appNumbers, appPadded,
+                                         ~ .y %in% str_split(.x, "\\|")[[1]])
+      ) |>
+      filter(!.appKnown | .appMatch) |>
+      filter(map2_lgl(sponsorName, splLabeler, same_company),
+             pmap_lgl(list(doseFormName, routes, splForm), compatible_form))
+  }
+
+  # Rule 1: the label cites this product's application number.
+  #
+  # Joined on the application number itself rather than on the name stem. The
+  # stem is only ever a device for finding candidates, and gating on it loses
+  # correct answers: Nuflor-S is filed under the stem "Nuflor" but the product
+  # stems to "NuflorS", so a stem join missed its own label. The application
+  # number does not care how either side spells the name.
+  #
+  # Where one application covers several products and several labels -- Nuflor
+  # and Nuflor-S share NADA 141-063 -- pick() then separates them on the name.
+  appnum_index <- dm |>
+    filter(!is.na(appNumbers), nzchar(appNumbers)) |>
+    distinct(setid, splName, splKey, splForm, splLabeler, appNumbers) |>
+    mutate(appList = str_split(appNumbers, "\\|")) |>
+    tidyr::unnest(appList) |>
+    filter(nzchar(appList))
+
+  by_appnum <- p |>
+    inner_join(appnum_index, by = c("appPadded" = "appList"),
+               relationship = "many-to-many") |>
+    admissible() |>
+    filter(.appMatch) |>
+    pick("application number on the label")
+
   # The labeller must correspond to FDA's sponsor even on an exact name match.
   # DailyMed carries human labels too, and trade names collide across the two:
   # "Gastrografin" matched a Bracco Diagnostics human contrast agent for a
   # product FDA lists under Zoetis. Sending a vet to a human drug's label is
   # exactly the sort of confident wrongness this app must not produce.
   exact <- p |>
+    anti_join(by_appnum, by = "proprietaryNameId") |>
     inner_join(dm, by = c("stem", "nameKey" = "splKey"),
                relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
+    admissible() |>
     pick("exact trade name")
 
   # FDA's sponsor and DailyMed's labeller are the same company written two
   # ways, so compare on a leading fragment rather than demanding equality:
   # "Norbrook Laboratories, Ltd." against "NORBROOK LABORATORIES LIMITED".
   by_sponsor <- p |>
+    anti_join(by_appnum, by = "proprietaryNameId") |>
     anti_join(exact, by = "proprietaryNameId") |>
     inner_join(dm, by = "stem", relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
+    admissible() |>
     pick("sponsor matches labeller")
 
   # A stem with only one label behind it still has to belong to the right
   # company, for the same reason.
   sole <- p |>
+    anti_join(by_appnum, by = "proprietaryNameId") |>
     anti_join(exact, by = "proprietaryNameId") |>
     anti_join(by_sponsor, by = "proprietaryNameId") |>
     inner_join(dm |> group_by(stem) |> filter(n_distinct(splKey) == 1) |> ungroup(),
                by = "stem", relationship = "many-to-many") |>
-    filter(map2_lgl(sponsorName, splLabeler, same_company)) |>
+    admissible() |>
     pick("only label under this name")
 
-  bind_rows(exact, by_sponsor, sole) |>
+  bind_rows(by_appnum, exact, by_sponsor, sole) |>
     distinct(proprietaryNameId, .keep_all = TRUE)
 }
