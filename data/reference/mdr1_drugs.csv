@@ -1,0 +1,32 @@
+pattern,species,category,note,url
+^loperamide,dog,avoid,Causes neurological toxicity at antidiarrheal doses in dogs with the MDR1 mutation.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^acepromazine,dog,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^apomorphine,dog,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^butorphanol,dog,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^cyclosporin,dog,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^grapiprant,dog,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^maropitant,dog,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^ondansetron,dog,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^doxorubicin|^vinblastine|^vincristine|^vinorelbine,dog,consult,Chemotherapy: WSU advises consulting its MDR1 dosing service before use in MDR1 dogs.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^ivermectin,dog,label_safe,Safe in MDR1 dogs at heartworm-preventive label doses. Higher doses (such as livestock formulations used for mange) cause neurological toxicity; consult before other uses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^milbemycin,dog,label_safe,Safe in MDR1 dogs at label doses; consult before other formulations or doses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^moxidectin,dog,label_safe,Safe in MDR1 dogs at label doses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^selamectin,dog,label_safe,Safe in MDR1 dogs at label doses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^afoxolaner,dog,label_safe,No adverse effects observed in MDR1 dogs at label doses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^fluralaner,dog,label_safe,No adverse effects observed in MDR1 dogs at label doses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^lotilaner,dog,label_safe,No adverse effects observed in MDR1 dogs at label doses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^sarolaner,dog,label_safe,No adverse effects observed in MDR1 dogs at label doses.,https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+^loperamide,cat,avoid,Causes neurological toxicity at antidiarrheal doses in cats with the MDR1 mutation.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^eprinomectin,cat,avoid,Do not use in cats with the MDR1 mutation; severe neurological toxicity and deaths reported at label doses.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^amlodipine,cat,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^capromorelin,cat,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^cisapride,cat,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^cyclosporin,cat,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^emodepside,cat,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^methylprednisolone,cat,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^sirolimus|^rapamycin,cat,consult,WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^doxorubicin|^vinblastine|^vincristine|^vinorelbine,cat,consult,Chemotherapy: WSU advises consulting its MDR1 dosing service before use in MDR1 cats.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^ivermectin,cat,label_safe,Safe in MDR1 cats at label doses; consult before other formulations.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^milbemycin,cat,label_safe,Safe in MDR1 cats at label doses; consult before other formulations.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^moxidectin,cat,ingestion_risk,Risk of toxicity in MDR1 cats if the topical product is ingested.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+^selamectin,cat,ingestion_risk,Risk of toxicity in MDR1 cats if the topical product is ingested.,https://waddl.vetmed.wsu.edu/mdr1-in-cats/

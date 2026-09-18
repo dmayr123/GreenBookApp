@@ -34,6 +34,14 @@ For each drug:
 | Professional guidance | Curated map in `data/reference/guidelines.csv` |
 | Dispensing status (RX / OTC / VFD) | ADAFDA, shown with market status in the results table |
 | Shortage / discontinued alert | FDA CVM shortage and discontinued lists, checked weekly |
+| Human-drug shortage note | openFDA drug shortages, matched by active ingredient, weekly |
+| Recall alert, FDA letters | FDA recall list and CVM Letters to Veterinary Professionals, weekly |
+| Food-animal ELU restriction | 21 CFR 530.41, curated in `data/reference/prohibited_extralabel.csv` |
+| DEA schedule (C-II to C-V) | 21 CFR 1308 / DEA list, curated in `data/reference/controlled_substances.csv` |
+| MDR1 (ABCB1) caution | WSU problem-drug lists, curated in `data/reference/mdr1_drugs.csv` |
+| Medically important antimicrobial | FDA GFI #152 Appendix A classes; GFI #263 Rx switch by application |
+| Reported adverse events | FDA CVM adverse event reports via openFDA, by ingredient and species |
+| Merck Veterinary Manual, FARAD, WSU links | Search and reference links by ingredient and species |
 
 Product type is collapsed from FDA's separate type and status codes into four
 categories — **NADA / Approved**, **ANADA / Generic**, **Conditional
@@ -58,6 +66,9 @@ source("R/01_fetch_adafda.R")     # ~15 min, ~5,000 requests
 source("R/02_tidy_greenbook.R")   # ~1 min
 source("R/03_ndc_dailymed.R")     # optional, ~25 min; adds NDC codes
 source("R/05_availability.R")     # optional, seconds; FDA shortage lists (needs rvest)
+source("R/06_drug_flags.R")       # optional, seconds; regulatory flags, no network
+source("R/07_safety_alerts.R")    # optional, seconds; FDA recalls and letters
+source("R/08_adverse_events.R")   # optional, ~10 min; openFDA adverse events
 shiny::runApp("app")
 ```
 
@@ -178,6 +189,75 @@ either page the script stops rather than writing an empty list, the previous
 list stays in place, the drug page warns once the check is over two weeks old,
 and the workflow files a `shortage-check` issue.
 
+The same script reads openFDA's **human** drug shortage list and matches it by
+active ingredient, because vets use human-labeled lidocaine, dexmedetomidine
+and furosemide extra-label. A product is matched only if it contains every
+ingredient of the shortage (a lidocaine-only product is not flagged by a
+lidocaine-with-epinephrine shortage), and medicated feeds are skipped. These
+show as a quiet note, not an alert.
+
+## Safety and regulatory flags
+
+`R/06_drug_flags.R` matches active ingredients against five lists in
+`data/reference/`, each transcribed from its primary source. They change
+rarely, so they are reviewed CSV edits rather than scrapes:
+
+| File | Source | Shown as |
+| --- | --- | --- |
+| `prohibited_extralabel.csv` | [21 CFR 530.41][cfr530] | Purple **!** alert at the top of the drug page |
+| `controlled_substances.csv` | [DEA controlled substances list][dea], 21 CFR 1308 | `C-III` badge in the Status column and on the drug page |
+| `mdr1_drugs.csv` | WSU MDR1 problem drugs, [dogs][wsu-dog] and [cats][wsu-cat] | "MDR1 caution" badge and a note |
+| `antimicrobial_classes.csv` | FDA GFI #152 Appendix A classes, as listed in FDA's antimicrobial sales report | Badge and note |
+| `gfi263_applications.csv` | [FDA's GFI #263 list][gfi263] | Note that the product went Rx in June 2023 |
+
+Rules worth knowing:
+
+- **DEA.** Pentobarbital or secobarbital combined with a non-controlled active
+  ingredient is Schedule III (the euthanasia solutions); alone it is II.
+  FDA-approved anabolic steroid **implants** for cattle are excluded from the
+  schedules (21 CFR 1308.26), so Synovex and Component implants get a note, not
+  a badge. Xylazine is not federally scheduled as of September 2026; the
+  Combating Illicit Xylazine Act would make it Schedule III, so update the CSV
+  if it passes.
+- **MDR1.** Shown on products labeled for dogs or cats, and the dog note also
+  on livestock macrocyclic lactones (ivermectin, moxidectin), because a cattle
+  ivermectin used in a collie is the classic poisoning.
+- **Ingredients are per application.** Where an application carries products
+  with different ingredients (M99 Etorphine and M50-50 Diprenorphine), a product
+  whose name names its own ingredient is matched on that ingredient only.
+
+`R/07_safety_alerts.R` reads FDA's recall list (Animal & Veterinary, last three
+years) and CVM's Letters to Veterinary Professionals. Neither carries an
+application number, so matching is by name: a recall needs the recalling firm to
+match the sponsor **and** the recall to name the product or its ingredient; a
+letter matches on brand name, or on every ingredient its title names. Trade
+names that are just the ingredient ("Pimobendan Chewable Tablets") and
+brand-family words shared by several products ("MoorMan's") do not count as
+brand names.
+
+## Adverse event reports
+
+`R/08_adverse_events.R` counts FDA CVM adverse event reports through openFDA
+for each active ingredient and each species a product with it is labeled for,
+with the eight most-reported signs. Queries use the base ingredient name
+("butorphanol"), which matches every salt form.
+
+Without an API key openFDA allows 1,000 requests a day, and a full refresh is
+about 1,200, so each run spends at most 900 on the stalest ingredients and
+keeps the rest. A fresh start fills in over two runs. For a one-run refresh,
+get a free key at open.fda.gov and add it as the repository secret
+`OPENFDA_API_KEY` (Settings → Secrets and variables → Actions). openFDA's data
+updates quarterly, so an ingredient is only re-fetched after 28 days.
+
+The drug page states what the counts are not: a report means a sign followed
+use, not that the drug caused it, and counts rise with how widely a drug is
+used.
+
+[cfr530]: https://www.ecfr.gov/current/title-21/section-530.41
+[dea]: https://www.deadiversion.usdoj.gov/schedules/orangebook/c_cs_alpha.pdf
+[wsu-dog]: https://waddl.vetmed.wsu.edu/mdr1-in-dogs/
+[wsu-cat]: https://waddl.vetmed.wsu.edu/mdr1-in-cats/
+[gfi263]: https://www.fda.gov/animal-veterinary/antimicrobial-resistance/list-approved-new-animal-drug-applications-affected-gfi-263
 [cvm-short]: https://www.fda.gov/animal-veterinary/product-safety-information/current-and-resolved-animal-drug-shortages
 [cvm-disc]: https://www.fda.gov/animal-veterinary/product-safety-information/discontinued-animal-drugs
 

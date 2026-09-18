@@ -1,0 +1,12 @@
+rule,pattern,exclude_pattern,restriction,cfr_paragraph
+chloramphenicol,chloramphenicol,,Prohibited from extra-label use in all food-producing animals.,530.41(a)(1)
+clenbuterol,clenbuterol,,Prohibited from extra-label use in all food-producing animals.,530.41(a)(2)
+des,diethylstilbestrol,,Prohibited from extra-label use in all food-producing animals.,530.41(a)(3)
+nitroimidazoles,nidazole\b,,Nitroimidazoles (including dimetridazole and ipronidazole) are prohibited from extra-label use in all food-producing animals.,530.41(a)(4)-(6)
+furazolidone,furazolidone,,Prohibited from extra-label use in all food-producing animals.,530.41(a)(7)
+nitrofurazone,nitrofurazone,,Prohibited from extra-label use in all food-producing animals.,530.41(a)(8)
+sulfonamides,\bsulfa(?!te\b)[a-z]+|\bsulfisoxazole,,"Sulfonamides are prohibited from extra-label use in lactating dairy cattle, except approved use of sulfadimethoxine, sulfabromomethazine and sulfaethoxypyridazine.",530.41(a)(9)
+fluoroquinolones,floxacin,,Fluoroquinolones are prohibited from extra-label use in all food-producing animals.,530.41(a)(10)
+glycopeptides,vancomycin|avoparcin,,Glycopeptides are prohibited from extra-label use in all food-producing animals.,530.41(a)(11)
+phenylbutazone,phenylbutazone,,Prohibited from extra-label use in female dairy cattle 20 months of age or older.,530.41(a)(12)
+cephalosporins,^cef|^ceph,cephapirin,"Cephalosporins (other than cephapirin) may not be used extra-label in cattle, swine, chickens or turkeys for disease prevention; at unapproved doses, frequencies, durations or routes; or in a species or production class the drug is not approved for.",530.41(a)(13)

@@ -113,6 +113,47 @@ AVAILABILITY_META <- read_table("availability_meta") %||%
   tibble(source = character(), title = character(), url = character(),
          pageUpdated = as.Date(character()), checkedDate = as.Date(character()))
 
+# Regulatory and safety flags from the curated lists in data/reference/
+# (R/06_drug_flags.R): food-animal prohibitions, DEA schedule, MDR1,
+# medically important antimicrobials, GFI #263. One row per product x flag.
+DRUG_FLAGS <- read_table("drug_flags") %||%
+  tibble(proprietaryNameId = integer(), flag = character(), badge = character(),
+         title = character(), detail = character(), severity = character(),
+         species = character(), url = character())
+
+# DEA schedule per product, for the Status column: a named vector is a single
+# lookup per row where a join would rebuild the table on every search.
+CONTROLLED_BADGE <- with(DRUG_FLAGS[DRUG_FLAGS$flag == "controlled", ],
+                         setNames(badge, proprietaryNameId))
+
+# FDA recalls and "Dear Veterinarian" letters (R/07_safety_alerts.R, weekly).
+SAFETY_ALERTS <- read_table("safety_alerts") %||%
+  tibble(proprietaryNameId = integer(), kind = character(), title = character(),
+         detail = character(), date = as.Date(character()), url = character(),
+         matchedBy = character())
+SAFETY_META <- read_table("safety_alerts_meta") %||%
+  tibble(source = character(), title = character(), url = character(),
+         checkedDate = as.Date(character()))
+
+# FDA CVM adverse event reports by ingredient and species, from openFDA
+# (R/08_adverse_events.R).
+ADVERSE_EVENTS <- read_table("adverse_events") %||%
+  tibble(base = character(), species = character(), term = character(),
+         count = integer(), rank = integer())
+ADVERSE_INDEX <- read_table("adverse_events_index") %||%
+  tibble(base = character(), species = character(), nReports = integer(),
+         fetched = as.Date(character()))
+
+# Green Book species group -> openFDA's species name. Mirrors SPECIES_MAP in
+# R/08_adverse_events.R.
+AE_SPECIES <- c(dogs = "Dog", cats = "Cat", horses = "Horse", cattle = "Cattle",
+                swine = "Pig", chickens = "Chicken", turkeys = "Turkey",
+                sheep = "Sheep", goats = "Goat", rabbits = "Rabbit")
+
+# Food-producing species groups, for the FARAD link.
+FOOD_SPECIES <- c("cattle", "swine", "sheep", "goats", "chickens", "turkeys",
+                  "fish", "honeybees", "rabbits")
+
 # The check runs weekly. Past this, the page warns that the list may be out of
 # date: a failed run leaves the previous list in place, and a stale "not in
 # shortage" must not read as a current one.
@@ -186,6 +227,13 @@ dispensing_badge <- function(x) {
   cls <- switch(x[1], RX = "disp-rx", OTC = "disp-otc", VFD = "disp-vfd",
                 "disp-mixed")
   sprintf('<span class="badge-cat %s">%s</span>', cls,
+          htmltools::htmlEscape(x[1]))
+}
+
+#' Badge for a DEA schedule ("C-II"), or "" for none.
+schedule_badge <- function(x) {
+  if (is.null(x) || length(x) == 0 || is.na(x[1]) || !nzchar(x[1])) return("")
+  sprintf('<span class="badge-cat disp-cs" title="DEA controlled substance">%s</span>',
           htmltools::htmlEscape(x[1]))
 }
 

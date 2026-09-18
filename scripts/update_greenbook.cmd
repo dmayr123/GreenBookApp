@@ -38,6 +38,15 @@ rem fail the update: the previous list stays in place with its check date.
 "%RSCRIPT%" R/05_availability.R >> "%LOG%" 2>&1
 if errorlevel 1 echo [%date% %time%] shortage check FAILED - previous list kept >> "%LOG%"
 
+rem Regulatory flags, FDA recalls and letters, and openFDA adverse events.
+rem Each keeps its previous output if it fails.
+"%RSCRIPT%" R/06_drug_flags.R >> "%LOG%" 2>&1
+if errorlevel 1 echo [%date% %time%] drug flags FAILED >> "%LOG%"
+"%RSCRIPT%" R/07_safety_alerts.R >> "%LOG%" 2>&1
+if errorlevel 1 echo [%date% %time%] recall and letter check FAILED - previous kept >> "%LOG%"
+"%RSCRIPT%" R/08_adverse_events.R >> "%LOG%" 2>&1
+if errorlevel 1 echo [%date% %time%] adverse event refresh FAILED - previous kept >> "%LOG%"
+
 if "%RC%"=="0" (
   echo [%date% %time%] update finished OK >> "%LOG%"
 ) else (

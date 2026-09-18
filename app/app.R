@@ -90,6 +90,45 @@ body {
 .avail-quiet .avail-dot { width:.5rem; height:.5rem; border-radius:50%;
   background:#3f9b6e; flex:0 0 auto; align-self:center; }
 .avail-quiet.stale .avail-dot { background:#c98a1b; }
+.avail-quiet.info .avail-dot { background:#3b6fb0; }
+.avail-recall { background:#fdecea; border-color:#f2c2bc; color:#6e1a13; }
+.avail-recall .avail-icon { background:#b42318; }
+.avail-prohibited { background:#f6ecf6; border-color:#dcc2dc; color:#5a1f55; }
+.avail-prohibited .avail-icon { background:#7c2a72; }
+.avail-recall a, .avail-prohibited a { color:inherit; text-decoration:underline; }
+
+/* DEA schedule badge, beside RX/OTC. */
+.disp-cs { background:#fff1c2; color:#6b4f00; }
+
+/* Header flag badges on the drug page. */
+.flag-badge { font-size:.72rem; font-weight:700; padding:.22rem .55rem;
+  border-radius:999px; white-space:nowrap; }
+.flag-prohibited { background:#f6ecf6; color:#7c2a72; }
+.flag-mdr1       { background:#fdf0dc; color:#8a5310; }
+.flag-antimicrobial { background:#e6f2f4; color:#155e6b; }
+
+/* Safety and regulatory notes. */
+.note-row { display:flex; gap:.7rem; padding:.6rem 0;
+  border-bottom:1px solid var(--gb-line); }
+.note-row:last-child { border-bottom:0; }
+.note-tag { flex:0 0 7.5rem; font-size:.68rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.05em; padding:.18rem .45rem;
+  border-radius:6px; align-self:flex-start; text-align:center; }
+.note-high    { background:#fbe1de; color:#a4241b; }
+.note-caution { background:#fdf0dc; color:#8a5310; }
+.note-info    { background:#e7eef7; color:#23558c; }
+.note-title { font-weight:600; color:var(--gb-ink); }
+.note-detail { font-size:.88rem; color:#43535c; }
+.note-src { font-size:.78rem; }
+
+/* Adverse event report summary. */
+.ae-block { margin-bottom:1rem; }
+.ae-head { font-weight:600; color:var(--gb-ink); margin-bottom:.35rem; }
+.ae-row { display:grid; grid-template-columns:minmax(8rem, 16rem) 1fr 3.5rem;
+  gap:.6rem; align-items:center; font-size:.85rem; padding:.12rem 0; }
+.ae-bar { height:.55rem; background:#dfe6e9; border-radius:999px; overflow:hidden; }
+.ae-bar span { display:block; height:100%; background:#6a8fb3; }
+.ae-n { text-align:right; color:#5a6b74; font-variant-numeric:tabular-nums; }
 
 /* Set directly rather than through a Bootstrap theme variable, so bslib does
    not have to recompile Sass on every visitor's first load. */
@@ -418,7 +457,10 @@ availability_ui <- function(pid) {
       span("FDA's animal drug shortage list was not checked for this build.")))
   }
 
-  checked <- min(AVAILABILITY_META$checkedDate)
+  # The animal lists' date. The human list is kept from an earlier run when
+  # openFDA is down, and must not make the animal check look stale.
+  animal_meta <- AVAILABILITY_META |> filter(source %in% c("shortage", "discontinued"))
+  checked <- min(animal_meta$checkedDate %||% AVAILABILITY_META$checkedDate)
   stale   <- as.numeric(Sys.Date() - checked) > AVAILABILITY_STALE_DAYS
   checked_txt <- paste0("checked ", fmt_day(checked),
                         if (stale) " — over two weeks ago, so this may be out of date"
@@ -481,8 +523,39 @@ availability_ui <- function(pid) {
       NULL)
   })
 
+  # Recalls and the food-animal prohibition sit with the shortage alerts:
+  # each can decide, before anything else on the page, whether to use it.
+  recalls <- SAFETY_ALERTS |> filter(proprietaryNameId == pid, kind == "recall") |>
+    arrange(desc(date))
+  recall_alerts <- map(seq_len(nrow(recalls)), function(i) {
+    r <- recalls[i, ]
+    div(class = "avail-alert avail-recall", role = "alert",
+      span(class = "avail-icon", `aria-hidden` = "true", "!"),
+      div(class = "avail-body",
+        div(class = "avail-title", sprintf("Recall, %s", fmt_day(r$date))),
+        r$detail, " ",
+        tags$a(href = r$url, target = "_blank", rel = "noopener", "Read FDA's notice"),
+        div(class = "avail-meta",
+            sprintf("Matched on %s · FDA recall list checked %s", r$matchedBy,
+                    fmt_day(max(SAFETY_META$checkedDate))))))
+  })
+
+  prohibited <- DRUG_FLAGS |> filter(proprietaryNameId == pid, flag == "prohibited")
+  prohibited_alert <- if (nrow(prohibited)) {
+    div(class = "avail-alert avail-prohibited", role = "note",
+      span(class = "avail-icon", `aria-hidden` = "true", "!"),
+      div(class = "avail-body",
+        div(class = "avail-title", "Extra-label use restricted in food animals"),
+        map(prohibited$detail, div),
+        div(class = "avail-meta",
+            tags$a(href = prohibited$url[1], target = "_blank", rel = "noopener",
+                   "21 CFR 530.41"),
+            " · applies to extra-label use; the approved label use is unaffected.")))
+  }
+
+  quiet <- list()
   if (!any(hits$kind %in% c("shortage", "discontinued"))) {
-    alerts <- c(alerts, list(
+    quiet <- c(quiet, list(
       div(class = paste("avail-quiet", if (stale) "stale" else ""),
         span(class = "avail-dot"),
         span(paste0("Not on FDA's animal drug shortage or discontinued lists · ",
@@ -491,7 +564,170 @@ availability_ui <- function(pid) {
                   "These lists hold only what sponsors report to FDA; ",
                   "distributor backorders are not included.")))))
   }
-  tagList(alerts)
+
+  # Human-labeled shortages, one line each: context for extra-label
+  # substitution, not a statement about this product's supply.
+  human <- hits |> filter(kind == "human_shortage")
+  quiet <- c(quiet, map(seq_len(nrow(human)), function(i) {
+    h <- human[i, ]
+    div(class = "avail-quiet info", span(class = "avail-dot"),
+      span(sprintf("Human-labeled %s is on FDA's drug shortage list (%s). ",
+                   str_replace_all(h$fdaIngredient, fixed(" + "), " with "), h$reason),
+           span(class = "text-muted", "Relevant if you substitute a human product. "),
+           tags$a(href = h$sourceUrl, target = "_blank", rel = "noopener",
+                  "FDA Drug Shortages")))
+  }))
+
+  tagList(alerts, recall_alerts, prohibited_alert, quiet)
+}
+
+#' Header badges for the drug page: DEA schedule, MDR1, medically important
+#' antimicrobial, food-animal restriction. Each is explained further down.
+flag_badges <- function(flags) {
+  one <- function(flag, cls, text = NULL) {
+    f <- flags |> filter(flag == !!flag)
+    if (nrow(f) == 0) return(NULL)
+    span(class = paste("flag-badge", cls), text %||% f$badge[1])
+  }
+  mdr1 <- flags |> filter(flag == "mdr1", severity != "info")
+  tagList(
+    one("controlled", "disp-cs"),
+    if (nrow(mdr1)) span(class = "flag-badge flag-mdr1", "MDR1 caution") else NULL,
+    one("antimicrobial", "flag-antimicrobial"),
+    one("prohibited", "flag-prohibited", "Food-animal ELU restricted")
+  )
+}
+
+#' The "Safety and regulatory notes" card: every flag and FDA letter for the
+#' product, one row each, most severe first. NULL when there is nothing to say.
+safety_notes_ui <- function(pid) {
+  flags <- DRUG_FLAGS |> filter(proprietaryNameId == pid, flag != "prohibited")
+  letters <- SAFETY_ALERTS |> filter(proprietaryNameId == pid, kind == "letter")
+  if (nrow(flags) == 0 && nrow(letters) == 0) return(NULL)
+
+  tag_for <- c(controlled = "DEA", controlled_excluded = "DEA", mdr1 = "MDR1",
+               antimicrobial = "Antimicrobial", antimicrobial_nmi = "Antimicrobial",
+               gfi263 = "Rx status")
+  order <- c(high = 1, caution = 2, info = 3)
+  flags <- flags |> arrange(order[severity], flag)
+
+  card(card_body(
+    h5("Safety and regulatory notes"),
+    map(seq_len(nrow(flags)), function(i) {
+      f <- flags[i, ]
+      div(class = "note-row",
+        span(class = paste0("note-tag note-", f$severity),
+             coalesce(unname(tag_for[f$flag]), f$flag)),
+        div(div(class = "note-title", f$title),
+            div(class = "note-detail", f$detail),
+            div(class = "note-src",
+                tags$a(href = f$url, target = "_blank", rel = "noopener", "Source"))))
+    }),
+    map(seq_len(nrow(letters)), function(i) {
+      l <- letters[i, ]
+      div(class = "note-row",
+        span(class = "note-tag note-caution", "FDA letter"),
+        div(div(class = "note-title",
+                tags$a(href = l$url, target = "_blank", rel = "noopener", l$title)),
+            div(class = "note-detail",
+                sprintf("From FDA's Letters to Veterinary Professionals; matched on %s.",
+                        l$matchedBy))))
+    })
+  ))
+}
+
+#' Adverse event reports for the product's active ingredients, in the chosen
+#' species if one is chosen, otherwise its labeled species with the most
+#' reports. NULL when nothing has been fetched for it.
+adverse_events_ui <- function(ings, sp, chosen = NULL) {
+  bases <- unique(ingredient_base(ings$activeIngredientName))
+  groups <- unique(sp$speciesGroup)
+  if (!is.null(chosen) && chosen != "any" && chosen %in% groups) groups <- chosen
+  want <- unname(AE_SPECIES[intersect(groups, names(AE_SPECIES))])
+
+  idx <- ADVERSE_INDEX |>
+    filter(base %in% bases, species %in% want) |>
+    arrange(desc(nReports))
+  if (nrow(idx) == 0) return(NULL)
+
+  # At most three ingredients and two species each, so a combination product
+  # does not bury the page.
+  idx <- idx |> filter(base %in% head(unique(base), 3)) |>
+    group_by(base) |> slice_head(n = 2) |> ungroup()
+  plural <- c(Dog = "dogs", Cat = "cats", Horse = "horses", Cattle = "cattle",
+              Pig = "pigs", Chicken = "chickens", Turkey = "turkeys",
+              Sheep = "sheep", Goat = "goats", Rabbit = "rabbits")
+
+  card(card_body(
+    h5("Reported adverse events"),
+    p(class = "text-muted small",
+      "Reports submitted to FDA's Center for Veterinary Medicine that mention ",
+      "this active ingredient in any product. A report shows a sign was seen ",
+      "after use, not that the drug caused it, and counts rise with how widely ",
+      "a drug is used. Lack of efficacy is reported as an adverse event."),
+    map(seq_len(nrow(idx)), function(i) {
+      x <- idx[i, ]
+      who <- coalesce(unname(plural[x$species]), x$species)
+      if (x$nReports == 0) {
+        return(div(class = "ae-block",
+          div(class = "ae-head", sprintf("%s in %s", str_to_sentence(x$base), who)),
+          span(class = "muted", "No reports on file.")))
+      }
+      signs <- ADVERSE_EVENTS |> filter(base == x$base, species == x$species) |>
+        arrange(rank)
+      top <- max(signs$count, 1)
+      div(class = "ae-block",
+        div(class = "ae-head",
+            sprintf("%s in %s: %s report%s", str_to_sentence(x$base), who,
+                    format(x$nReports, big.mark = ","),
+                    if (x$nReports == 1) "" else "s")),
+        map(seq_len(nrow(signs)), function(j) {
+          div(class = "ae-row",
+            span(signs$term[j]),
+            span(class = "ae-bar", span(style = sprintf("width:%.0f%%",
+                                                         100 * signs$count[j] / top))),
+            span(class = "ae-n", format(signs$count[j], big.mark = ",")))
+        }))
+    }),
+    div(class = "cite",
+      "Source: FDA CVM adverse event reports via ",
+      tags$a(href = "https://open.fda.gov/apis/animalandveterinary/event/",
+             target = "_blank", rel = "noopener", "openFDA"),
+      sprintf(", fetched %s. ", fmt_day(max(idx$fetched))),
+      tags$a(href = paste0("https://www.fda.gov/animal-veterinary/product-safety-information/",
+                           "adverse-event-reports-animal-drugs-and-devices"),
+             target = "_blank", rel = "noopener", "Report an adverse event to FDA"))
+  ))
+}
+
+#' Links out, by ingredient and species: Merck Veterinary Manual, FARAD for
+#' food animals, WSU for MDR1 drugs.
+reference_links <- function(ings, sp, flags) {
+  bases <- unique(ingredient_base(ings$activeIngredientName))
+  bases <- bases[nzchar(bases)]
+  merck <- map(head(bases, 3), function(b) {
+    tags$a(class = "doc-link", target = "_blank", rel = "noopener",
+      href = paste0("https://www.merckvetmanual.com/searchresults?query=",
+                    utils::URLencode(b, reserved = TRUE)),
+      strong("Merck Veterinary Manual"), " — search for ", b)
+  })
+  farad <- if (any(sp$speciesGroup %in% FOOD_SPECIES)) tagList(
+    tags$a(class = "doc-link", href = "https://www.farad.org/", target = "_blank",
+           rel = "noopener", strong("FARAD"),
+           " — Food Animal Residue Avoidance Databank: withdrawal intervals and ",
+           "extra-label withdrawal requests"),
+    tags$a(class = "doc-link", href = "https://vetgram.farad.org/", target = "_blank",
+           rel = "noopener", strong("FARAD VetGRAM"),
+           " — approved drugs and label withdrawal times by species")
+  )
+  mdr1 <- flags |> filter(flag == "mdr1") |> distinct(url)
+  wsu <- map(mdr1$url, function(u) {
+    tags$a(class = "doc-link", href = u, target = "_blank", rel = "noopener",
+           strong("WSU MDR1 problem drugs"),
+           paste0(if (str_detect(u, "cats")) " — cats" else " — dogs",
+                  ", from the Washington State University laboratory that found the mutation"))
+  })
+  tagList(merck, farad, wsu)
 }
 
 detail_ui <- function() {
@@ -698,6 +934,7 @@ server <- function(input, output, session) {
         # still renders, just without the badge.
         Dispensing  = if ("dispensingStatus" %in% names(d))
                         coalesce(dispensingStatus, "") else "",
+        Schedule    = coalesce(unname(CONTROLLED_BADGE[as.character(proprietaryNameId)]), ""),
         Labeler     = coalesce(sponsorName, ""),
         Form        = coalesce(doseFormName, ""),
         Species     = coalesce(speciesList, ""),
@@ -738,8 +975,13 @@ server <- function(input, output, session) {
         # the Type badges, so Rx and OTC products can be told apart at a
         # glance down the column. Sorting still follows market status.
         Dispensing = colDef(show = FALSE),
-        Status = colDef(minWidth = 170, html = TRUE, cell = function(v, index) {
-          disp <- dispensing_badge(tbl$Dispensing[index])
+        Schedule   = colDef(show = FALSE),
+        Status = colDef(minWidth = 235, html = TRUE, cell = function(v, index) {
+          # RX, then the DEA schedule when there is one: "RX C-III, currently
+          # marketed".
+          disp <- paste0(dispensing_badge(tbl$Dispensing[index]),
+                         if (nzchar(tbl$Schedule[index])) " " else "",
+                         schedule_badge(tbl$Schedule[index]))
           market <- if (identical(v, "Voluntarily withdrawn"))
             '<span class="badge-withdrawn">Withdrawn</span>'
           else htmltools::htmlEscape(if (nzchar(disp)) str_to_lower(v) else v)
@@ -793,6 +1035,7 @@ server <- function(input, output, session) {
     docs <- DOCUMENTS    |> filter(applicationId == prod$applicationId)
     ndc  <- NDC          |> filter(proprietaryNameId == pid)
     labels <- LABEL_LINKS |> filter(proprietaryNameId == pid) |> arrange(tier)
+    flags  <- DRUG_FLAGS  |> filter(proprietaryNameId == pid)
 
     # Dosing is filtered to the chosen species when we can tell which
     # population headers belong to it. FDA does not link ail headers to
@@ -843,10 +1086,11 @@ server <- function(input, output, session) {
             div(class = "text-muted",
                 sprintf("%s %s", app$applicationType, app$applicationNumber))
           ),
-          div(class = "d-flex gap-2 align-items-center",
+          div(class = "d-flex gap-2 align-items-center flex-wrap",
             span(class = paste("badge-cat", category_class(app$category)), app$category),
             if (app$marketStatus == "Voluntarily withdrawn")
-              span(class = "badge-withdrawn", "Voluntarily withdrawn") else NULL
+              span(class = "badge-withdrawn", "Voluntarily withdrawn") else NULL,
+            flag_badges(flags)
           )
         ),
         # Where FDA's structured type field contradicts the evidence, say so
@@ -920,6 +1164,11 @@ server <- function(input, output, session) {
           field("Strength / specifications", or_none(prod$specifications))
         )
       )),
+
+      # -- safety and regulatory notes --------------------------------------
+      # MDR1, DEA schedule, antimicrobial status, FDA letters. Directly under
+      # the identity card, because these change how the drug may be used.
+      safety_notes_ui(pid),
 
       # -- product label -----------------------------------------------------
       # Ranked manufacturer -> FOI -> other cited source. Every source is
@@ -1009,6 +1258,9 @@ server <- function(input, output, session) {
         else NULL
       )),
 
+      # -- adverse events ----------------------------------------------------
+      adverse_events_ui(ings, sp, species()),
+
       # -- documents ---------------------------------------------------------
       card(card_body(
         h5("Documents and further reading"),
@@ -1041,6 +1293,8 @@ server <- function(input, output, session) {
           } else span(class = "muted",
                       "This is the pioneer product (no earlier application listed).")
         ),
+        div(class = "field-label", "More references"),
+        div(class = "field-value", reference_links(ings, sp, flags)),
         div(class = "field-label", "Look this up at FDA"),
         div(class = "field-value",
           "Animal Drugs @ FDA cannot link to a single product, so search it by ",

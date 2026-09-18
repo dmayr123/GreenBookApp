@@ -220,19 +220,48 @@ jobs:
         shell: bash -o pipefail {0}
         continue-on-error: true
 
+      # Curated flags (food-animal prohibitions, DEA schedule, MDR1,
+      # antimicrobial status) from data/reference/. No network, so it is not
+      # allowed to fail quietly: a broken reference CSV should fail the build.
+      - name: Build regulatory and safety flags
+        run: Rscript R/06_drug_flags.R
+
+      # FDA recalls and Dear Veterinarian letters, weekly like the shortages.
+      - name: Check FDA recalls and veterinary letters
+        id: safety_alerts
+        run: Rscript R/07_safety_alerts.R | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -o pipefail {0}
+        continue-on-error: true
+
+      # Adverse event counts from openFDA. Keyless runs spend at most 900
+      # requests and pick up where the last run stopped; add a repository
+      # secret OPENFDA_API_KEY (free from open.fda.gov) to refresh everything
+      # in one run. Never blocks publishing: the previous counts stay.
+      - name: Refresh adverse event reports from openFDA
+        run: Rscript R/08_adverse_events.R | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -o pipefail {0}
+        continue-on-error: true
+        env:
+          OPENFDA_API_KEY: ${{ secrets.OPENFDA_API_KEY }}
+
       - name: File an issue if the shortage check failed
-        if: steps.availability.outcome == 'failure'
+        if: steps.availability.outcome == 'failure' || steps.safety_alerts.outcome == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHORTAGE: ${{ steps.availability.outcome }}
+          ALERTS: ${{ steps.safety_alerts.outcome }}
         run: |
           gh label create "shortage-check" \
             --description "Automated FDA drug shortage check" \
             --color "B42318" 2>/dev/null || true
-          body="The weekly FDA animal drug shortage check failed, so the site is showing the previous list. FDA may have changed the page layout; see the log: $RUN_URL"
-          gh issue create --title "FDA shortage check failed — $(date '+%d %B %Y')" \
+          failed=""
+          [ "$SHORTAGE" = "failure" ] && failed="the FDA animal drug shortage check"
+          [ "$ALERTS" = "failure" ] && failed="${failed:+$failed and }the FDA recall and letter check"
+          body="This week's run of $failed failed, so the site is showing the previous results. FDA may have changed a page layout; see the log: $RUN_URL"
+          gh issue create --title "FDA weekly check failed — $(date '+%d %B %Y')" \
               --body "$body" --label "shortage-check" \
-            || gh issue create --title "FDA shortage check failed — $(date '+%d %B %Y')" \
+            || gh issue create --title "FDA weekly check failed — $(date '+%d %B %Y')" \
               --body "$body" \
             || echo "Could not file the issue."
 

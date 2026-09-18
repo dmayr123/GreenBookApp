@@ -115,6 +115,38 @@ classify_ingredients <- function(ingredient_names) {
     arrange(activeIngredientName, drugClass)
 }
 
+#' Salt, ester and hydrate words that do not change which drug an ingredient
+#' is. "Butorphanol Tartrate" and "Butorphanol" are one drug to an adverse
+#' event database, a shortage list or a formulary search.
+#'
+#' Deliberately absent: procaine, benzathine and potassium, which distinguish
+#' penicillin G products a vet does treat as different drugs.
+SALT_WORDS <- c(
+  "hydrochloride", "dihydrochloride", "monohydrochloride", "hcl", "hydrobromide",
+  "sulfate", "sulphate", "bisulfate", "bitartrate", "maleate", "dimaleate", "tartrate",
+  "acetate", "phosphate", "citrate", "mesylate", "besylate", "fumarate",
+  "hydrogen", "hyclate", "succinate", "lactate", "edisylate", "pamoate",
+  "trihydrate", "dihydrate", "monohydrate", "pentahydrate", "tetrahydrate",
+  "anhydrous", "sodium", "disodium", "meglumine", "dipropionate", "valerate",
+  "benzoate", "propionate", "undecylenate", "oxime", "proxetil", "zinc",
+  "calcium", "methylenedisalicylate", "crystalline", "free", "resinate", "palmitate", "thiocyanate", "complex", "usp", "nf"
+)
+
+#' The drug an ingredient name refers to, lower-cased, without salt words.
+#'
+#' Salt words are removed only after the first word, so "Sodium Selenite"
+#' stays itself rather than becoming "selenite".
+ingredient_base <- function(x) {
+  map_chr(str_to_lower(coalesce(x, "")), function(n) {
+    w <- str_split(str_squish(str_replace_all(n, "[(),]", " ")), " ")[[1]]
+    if (length(w) <= 1) return(paste(w, collapse = " "))
+    # "Acid" names the drug in "Salicylic Acid"; only "Free Acid" is a salt form.
+    drop <- c(SALT_WORDS, if ("free" %in% w) "acid")
+    keep <- c(TRUE, !w[-1] %in% drop)
+    paste(w[keep], collapse = " ")
+  })
+}
+
 #' Guidelines that apply to a product.
 #'
 #' Matches on the product's drug classes and on the species it is labeled

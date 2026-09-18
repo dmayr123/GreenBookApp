@@ -19,6 +19,11 @@
 # list covers shortages sponsors report to FDA, which is narrower -- the app
 # says so wherever it shows a clean result.
 #
+# Also reads openFDA's human drug shortage list, matched by active ingredient,
+# because vets use human-labeled lidocaine, dexmedetomidine and the like
+# extra-label. Those rows are kind "human_shortage" and show as a note, not an
+# alert; if openFDA is unreachable the previous human rows are kept.
+#
 # Writes data/processed/availability.{rds,parquet}       one row per product x FDA entry
 #        data/processed/availability_meta.{rds,parquet}  one row per FDA page checked
 #
@@ -38,7 +43,8 @@ library(arrow)
 library(httr2)
 library(rvest)
 
-source("R/search.R")   # norm_text(), so names normalize the way search does
+source("R/search.R")         # norm_text(), so names normalize the way search does
+source("R/drug_classes.R")   # ingredient_base(), for the human shortage list
 
 proc_dir <- function(...) path("data", "processed", ...)
 
@@ -190,6 +196,118 @@ match_products <- function(entries, products, applications) {
   })
 }
 
+# -- human drug shortages (openFDA) -------------------------------------------
+#
+# Vets use human-labeled products extra-label every day -- lidocaine,
+# epinephrine, dexmedetomidine -- so a human shortage of the same drug is worth
+# knowing about on the animal product's page. It is shown as a quiet note, not
+# an alert: it says nothing about the veterinary product's own supply.
+
+HUMAN_SHORTAGE <- list(
+  api   = "https://api.fda.gov/drug/shortages.json",
+  title = "FDA Drug Shortages (human drugs, via openFDA)",
+  url   = "https://www.accessdata.fda.gov/scripts/drugshortages/"
+)
+
+# Dosage-form words in openFDA's generic_name, used only when a record has no
+# substance_name to read the ingredients from.
+FORM_WORDS <- paste0("\\b(injection|injectable|tablets?|capsules?|solution|",
+                     "suspension|oral|ophthalmic|topical|cream|ointment|extended|",
+                     "delayed|release|for|powder|lyophilized|emulsion|gel|patch|",
+                     "vials?|premixed|in|usp|chewable|film|coated)\\b")
+
+FEED_FORMS <- "medicated|premix|feed|block|type [abc]|crumble|pellet|mineral"
+
+fetch_human_shortages <- function() {
+  page <- function(skip) {
+    request(HUMAN_SHORTAGE$api) |>
+      req_url_query(search = 'status:"Current"', limit = 100, skip = skip) |>
+      req_user_agent(UA) |> req_timeout(60) |>
+      req_retry(max_tries = 4, backoff = function(i) 5 * i) |>
+      req_perform() |> resp_body_json(simplifyVector = FALSE)
+  }
+  first <- page(0)
+  total <- first$meta$results$total
+  if (is.null(total) || total == 0) stop("openFDA returned no current drug shortages.")
+  recs <- first$results
+  skip <- 100
+  while (skip < total) {
+    Sys.sleep(0.3)   # openFDA allows 240 requests a minute without a key
+    recs <- c(recs, page(skip)$results)
+    skip <- skip + 100
+  }
+
+  map_dfr(recs, function(r) {
+    subs <- unlist(r$openfda$substance_name %||% list())
+    bases <- if (length(subs)) ingredient_base(subs) else {
+      str_to_lower(r$generic_name %||% "") |>
+        str_replace_all(FORM_WORDS, " ") |>
+        str_split(",| and |/|;") |> unlist() |> str_squish() |>
+        discard(~ !nzchar(.x)) |> ingredient_base()
+    }
+    tibble(key = paste(sort(unique(bases)), collapse = " + "),
+           bases = list(sort(unique(bases))),
+           generic = r$generic_name %||% NA_character_,
+           availability = r$availability %||% NA_character_,
+           reason = r$shortage_reason %||% NA_character_,
+           posted = as.Date(r$initial_posting_date %||% NA, format = "%m/%d/%Y"))
+  }) |>
+    # A bare "sodium" is what a salt-only substance name reduces to; it names
+    # no drug a vet would look up.
+    filter(nzchar(key), !key %in% c("sodium", "water", "sterile water"))
+}
+
+#' One row per shortage drug (a set of ingredients), summarizing its package
+#' records, matched to every Green Book product that contains all of those
+#' ingredients -- so a lidocaine-only product is not flagged by a shortage of
+#' lidocaine with epinephrine, but a lidocaine-epinephrine product is.
+match_human_shortages <- function(recs, products, ingredients) {
+  drugs <- recs |>
+    group_by(key) |>
+    summarize(bases = bases[1],
+              names = paste(head(unique(generic), 3), collapse = "; "),
+              nPres = n(),
+              nUnavailable = sum(availability == "Unavailable", na.rm = TRUE),
+              nLimited = sum(availability == "Limited Availability", na.rm = TRUE),
+              began = suppressWarnings(min(posted, na.rm = TRUE)),
+              reasons = paste(head(unique(na.omit(reason)), 2), collapse = "; "),
+              .groups = "drop")
+
+  # Medicated feeds are left out: a shortage of human bacitracin injection
+  # says nothing useful about a bacitracin feed additive, and flagged every
+  # one of them.
+  prod_bases <- products |>
+    # The name as well as the form: some premixes have no dosage form recorded.
+    filter(!str_detect(paste(coalesce(doseFormName, ""), proprietaryName),
+                       regex(FEED_FORMS, ignore_case = TRUE))) |>
+    select(proprietaryNameId, applicationId) |>
+    inner_join(ingredients |> distinct(applicationId, activeIngredientName),
+               by = "applicationId", relationship = "many-to-many") |>
+    mutate(base = ingredient_base(activeIngredientName)) |>
+    group_by(proprietaryNameId) |>
+    summarize(bases = list(unique(base)), .groups = "drop")
+
+  map_dfr(seq_len(nrow(drugs)), function(i) {
+    d <- drugs[i, ]
+    b <- d$bases[[1]]
+    hit <- prod_bases$proprietaryNameId[map_lgl(prod_bases$bases, ~ all(b %in% .x))]
+    if (length(hit) == 0) return(NULL)
+    summary <- sprintf("%d presentation%s listed%s", d$nPres, if (d$nPres == 1) "" else "s",
+      if (d$nUnavailable + d$nLimited > 0)
+        sprintf(": %s", paste(c(
+          if (d$nUnavailable) sprintf("%d unavailable", d$nUnavailable),
+          if (d$nLimited) sprintf("%d limited", d$nLimited)), collapse = ", "))
+      else "")
+    tibble(proprietaryNameId = hit, kind = "human_shortage",
+           fdaIngredient = d$key, fdaProduct = d$names, firm = NA_character_,
+           phone = NA_character_, reason = summary,
+           began = if (is.finite(d$began)) d$began else as.Date(NA),
+           resolved = as.Date(NA), posted = as.Date(NA),
+           info = na_if(d$reasons, ""), applicationNumber = NA_integer_,
+           matchedBy = "active ingredient", sourceUrl = HUMAN_SHORTAGE$url)
+  })
+}
+
 check_availability <- function() {
   message("=== FDA animal drug availability: ", format(Sys.time()), " ===")
 
@@ -247,6 +365,29 @@ check_availability <- function() {
 
   unmatched <- entries |> filter(!entryId %in% matches$entryId)
 
+  # The human list is supplementary. If openFDA is down, keep last week's
+  # human rows and their check date rather than failing the animal lists,
+  # which are the ones that matter here.
+  prev <- if (file_exists(proc_dir("availability.rds"))) readRDS(proc_dir("availability.rds"))
+  prev_meta <- if (file_exists(proc_dir("availability_meta.rds")))
+    readRDS(proc_dir("availability_meta.rds"))
+  human <- tryCatch({
+    message("  fetching ", HUMAN_SHORTAGE$title, " ...")
+    recs <- fetch_human_shortages()
+    ingredients <- readRDS(proc_dir("ingredients.rds"))
+    rows <- match_human_shortages(recs, products, ingredients)
+    list(rows = rows, meta = tibble(
+      source = "human", title = HUMAN_SHORTAGE$title, url = HUMAN_SHORTAGE$url,
+      pageUpdated = as.Date(NA), checkedDate = Sys.Date(),
+      nListed = n_distinct(recs$key), nMatched = n_distinct(rows$fdaIngredient),
+      unmatched = ""))
+  }, error = function(e) {
+    warning("Human drug shortage check failed; keeping the previous list. ", conditionMessage(e))
+    list(rows = if (!is.null(prev)) prev |> filter(kind == "human_shortage"),
+         meta = if (!is.null(prev_meta)) prev_meta |> filter(source == "human"))
+  })
+  availability <- bind_rows(availability, human$rows)
+
   checked <- Sys.Date()
   meta <- imap_dfr(SOURCES, function(src, key) {
     listed <- entries |> filter(source == key)
@@ -257,7 +398,8 @@ check_availability <- function() {
            nMatched = sum(listed$entryId %in% matches$entryId),
            unmatched = paste(unmatched$fdaProduct[unmatched$source == key],
                              collapse = "; "))
-  })
+  }) |>
+    bind_rows(human$meta)
 
   write_table(availability, "availability")
   write_table(meta, "availability_meta")
@@ -268,7 +410,7 @@ check_availability <- function() {
   cat("|---|---|---|---|\n")
   for (i in seq_len(nrow(meta))) {
     cat(sprintf("| %s | %s | %d | %d |\n", meta$title[i],
-                format(meta$pageUpdated[i], "%d %b %Y"),
+                if (is.na(meta$pageUpdated[i])) "—" else format(meta$pageUpdated[i], "%d %b %Y"),
                 meta$nListed[i], meta$nMatched[i]))
   }
   now_short <- entries |> filter(kind == "shortage")

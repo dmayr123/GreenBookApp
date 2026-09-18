@@ -1,0 +1,27 @@
+pattern,schedule,dea_name,note
+^fentanyl,II,Fentanyl,
+^carfentanil,II,Carfentanil,
+^etorphine,II,Etorphine HCl,
+^oxymorphone,II,Oxymorphone,
+^pentobarbital,II,Pentobarbital,Schedule III when combined with a non-controlled active ingredient (as in most euthanasia solutions).
+^secobarbital,II,Secobarbital,Schedule III when combined with a non-controlled active ingredient.
+^buprenorphine,III,Buprenorphine,
+^nalorphine,III,Nalorphine,
+^ketamine,III,Ketamine,
+^tiletamine|^zolazepam,III,Tiletamine & zolazepam combination product,
+^embutramide?$,III,Embutramide,
+^thiopental,III,Thiopental,
+^thiamylal,III,Thiamylal,
+^thialbarbitone,III,Barbituric acid derivative,
+^boldenone,III,Boldenone (anabolic steroid),
+^mibolerone,III,Mibolerone (anabolic steroid),
+^stanozolol,III,Stanozolol (anabolic steroid),
+^testosterone,III,Testosterone (anabolic steroid),FDA-approved implants for cattle or other nonhuman species are excluded from the schedules (21 CFR 1308.26).
+^trenbolone,III,Trenbolone (anabolic steroid),FDA-approved implants for cattle or other nonhuman species are excluded from the schedules (21 CFR 1308.26).
+^butorphanol,IV,Butorphanol,
+^pentazocine,IV,Pentazocine,
+^diazepam,IV,Diazepam,
+^alfaxalone,IV,Alfaxalone,
+^chloral hydrate,IV,Chloral hydrate,
+^phenobarbital,IV,Phenobarbital,
+^pregabalin,V,Pregabalin,
