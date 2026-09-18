@@ -1,5 +1,6 @@
 # ---------------------------------------------------------------------------
-# Monthly Green Book refresh, then publish to GitHub Pages.
+# Monthly Green Book refresh, then publish to GitHub Pages. A lighter weekly
+# run refreshes only FDA's animal drug shortage lists (R/05_availability.R).
 #
 # The site is built here and uploaded as a Pages artifact rather than being
 # committed. That matters: the compiled site is ~100 MB (most of it the
@@ -18,6 +19,11 @@ on:
     # 06:00 UTC on the 6th of each month. FDA publishes the new Green Book
     # edition monthly but not on a fixed day; the 6th leaves room for it.
     - cron: "0 6 6 * *"
+    # Mondays, 11:00 UTC (early morning Central). Weekly runs refresh only
+    # FDA's animal drug shortage and discontinuation lists and rebuild the
+    # site from the cached tables; the Green Book crawl stays monthly. Keep
+    # this string identical to WEEKLY_CRON in the "Choose" step below.
+    - cron: "0 11 * * 1"
   workflow_dispatch:        # lets you run it by hand from the Actions tab
   push:
     branches: [main]
@@ -64,7 +70,7 @@ jobs:
             any::shiny, any::bslib, any::reactable, any::dplyr, any::tidyr,
             any::stringr, any::purrr, any::readr, any::tibble, any::jsonlite,
             any::httr2, any::arrow, any::fs, any::glue, any::prettyunits,
-            any::shinylive
+            any::shinylive, any::rvest
 
       # Restoring the raw payloads turns the monthly run into an incremental
       # diff instead of a full re-crawl. The key rotates monthly so the cache
@@ -78,10 +84,43 @@ jobs:
           restore-keys: |
             adafda-raw-
 
+      # The built tables, cached too, so a weekly run can rebuild the site
+      # without redoing the monthly pipeline. This also carries the update
+      # history (update_log.rds, update_runs.rds) from one run to the next.
+      # A separate cache from data/raw: changing that one's path would orphan
+      # it and force the full crawl again.
+      - name: Cache processed tables
+        uses: actions/cache@v4
+        with:
+          path: data/processed
+          key: greenbook-processed-${{ github.run_id }}
+          restore-keys: |
+            greenbook-processed-
+
+      # "weekly" only for the weekly cron, and only when there are cached
+      # tables to rebuild from. Everything else -- the monthly cron, a push, a
+      # manual run -- is a full refresh.
+      - name: Choose full or weekly run
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          WEEKLY_CRON: "0 11 * * 1"
+        run: |
+          if [ "$EVENT" = "schedule" ] && [ "$SCHEDULE" = "$WEEKLY_CRON" ] \
+             && [ -f data/processed/search_index.rds ]; then
+            echo "mode=weekly" >> "$GITHUB_OUTPUT"
+            echo "Weekly run: refreshing FDA shortage lists only." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Refresh Green Book data
+        if: steps.mode.outputs.mode == 'full'
         run: Rscript R/04_monthly_update.R
 
       - name: Refresh NDC codes from DailyMed
+        if: steps.mode.outputs.mode == 'full'
         run: Rscript R/03_ndc_dailymed.R
         # DailyMed is occasionally unavailable. The app treats NDC as optional
         # and shows a search link instead, so a failure here must not block
@@ -100,24 +139,28 @@ jobs:
       # a cattle injection label on a swine medicated article. Only new labels
       # are fetched, so this is cheap after the first run.
       - name: Read application numbers from new labels
+        if: steps.mode.outputs.mode == 'full'
         run: Rscript scripts/build_dailymed_appnumbers.R
         continue-on-error: true
 
       - name: Refresh manufacturer product pages
+        if: steps.mode.outputs.mode == 'full'
         run: Rscript scripts/build_manufacturer_links.R
         continue-on-error: true
 
       # Rebuild so the label links pick up the two reference tables above.
       # 04 ran the tidy step before they were refreshed.
       - name: Rebuild tables with the refreshed references
+        if: steps.mode.outputs.mode == 'full'
         run: Rscript R/02_tidy_greenbook.R
 
       - name: Check guideline links and ages
+        if: steps.mode.outputs.mode == 'full'
         run: Rscript scripts/check_guideline_links.R 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
         continue-on-error: true
 
       - name: Publish the changelog as a build summary
-        if: always()
+        if: always() && steps.mode.outputs.mode == 'full'
         run: |
           latest=$(ls -1 data/changelog/*.md 2>/dev/null | tail -1)
           if [ -n "$latest" ]; then
@@ -136,7 +179,7 @@ jobs:
       # that matters; a quiet month is still recorded in the app and in the
       # build summary.
       - name: File the monthly drug update as an issue
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && steps.mode.outputs.mode == 'full'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -164,6 +207,34 @@ jobs:
               --label "monthly-update" \
             || gh issue create --title "$title" --body-file "$latest" \
             || echo "Could not file the issue; the changelog is in the build summary above."
+
+      # Every run, full or weekly. Stops with an error if FDA restructures
+      # either page, rather than publishing an empty list that would read as
+      # "not in shortage" on every drug. The site still builds on failure: the
+      # previous list stays in the cached tables and the drug page shows its
+      # check date, warning once it is over two weeks old. The next step
+      # files an issue so the failure is not only visible in the Actions tab.
+      - name: Check FDA drug shortages and discontinuations
+        id: availability
+        run: Rscript R/05_availability.R | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -o pipefail {0}
+        continue-on-error: true
+
+      - name: File an issue if the shortage check failed
+        if: steps.availability.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create "shortage-check" \
+            --description "Automated FDA drug shortage check" \
+            --color "B42318" 2>/dev/null || true
+          body="The weekly FDA animal drug shortage check failed, so the site is showing the previous list. FDA may have changed the page layout; see the log: $RUN_URL"
+          gh issue create --title "FDA shortage check failed — $(date '+%d %B %Y')" \
+              --body "$body" --label "shortage-check" \
+            || gh issue create --title "FDA shortage check failed — $(date '+%d %B %Y')" \
+              --body "$body" \
+            || echo "Could not file the issue."
 
       - name: Build the static site
         run: Rscript scripts/build_static_site.R

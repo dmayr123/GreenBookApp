@@ -33,6 +33,11 @@ echo [%date% %time%] starting monthly update >> "%LOG%"
 "%RSCRIPT%" R/04_monthly_update.R >> "%LOG%" 2>&1
 set "RC=%ERRORLEVEL%"
 
+rem FDA shortage and discontinued lists. A failure here is logged but does not
+rem fail the update: the previous list stays in place with its check date.
+"%RSCRIPT%" R/05_availability.R >> "%LOG%" 2>&1
+if errorlevel 1 echo [%date% %time%] shortage check FAILED - previous list kept >> "%LOG%"
+
 if "%RC%"=="0" (
   echo [%date% %time%] update finished OK >> "%LOG%"
 ) else (

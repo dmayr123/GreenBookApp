@@ -568,7 +568,7 @@ build_all <- function() {
     # Keeping the join's other 21 columns cost 1.9 MB of 4.2 MB for data
     # nothing displays -- the detail page reads those from their own tables.
     select(proprietaryNameId, proprietaryName, ingredients, category,
-           marketStatus, sponsorName, doseFormName, speciesList,
+           marketStatus, dispensingStatus, sponsorName, doseFormName, speciesList,
            applicationNumber, speciesGroups,
            searchKey, searchKeyWide, nameKey, ingKey, appKey)
 

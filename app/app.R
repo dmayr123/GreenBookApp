@@ -58,8 +58,38 @@ body {
 .cat-conditional{ background:#fdf0dc; color:#8a5310; }
 .cat-eua        { background:#f6e6f0; color:#7c2a5c; }
 .cat-other      { background:#eceff1; color:#546069; }
-.badge-withdrawn{ background:#fbe6e6; color:#8f2626; font-size:.72rem;
+/* Withdrawn is slate rather than red: red now means RX, and the two sit side
+   by side in the Status column. */
+.badge-withdrawn{ background:#e6e9ec; color:#3d4a52; font-size:.72rem;
   font-weight:700; padding:.22rem .55rem; border-radius:999px; }
+
+/* Dispensing class, shown in the Status column and on the drug page. */
+.disp-rx    { background:#fbe1de; color:#a4241b; }
+.disp-otc   { background:#ece7f8; color:#51369e; }
+.disp-vfd   { background:#fcebdc; color:#94470f; }
+.disp-mixed { background:#eceff1; color:#546069; }
+.status-cell { line-height:1.9; white-space:nowrap; }
+
+/* Availability alert at the top of a drug page. */
+.avail-alert { display:flex; gap:.75rem; align-items:flex-start;
+  border:1px solid; border-radius:10px; padding:.8rem 1rem; margin-top:.9rem; }
+.avail-alert + .avail-alert { margin-top:.5rem; }
+.avail-icon { flex:0 0 1.7rem; height:1.7rem; border-radius:50%; color:#fff;
+  font-weight:800; font-size:1.05rem; line-height:1.7rem; text-align:center; }
+.avail-title { font-weight:700; margin-bottom:.15rem; }
+.avail-body { font-size:.9rem; }
+.avail-body .avail-meta { font-size:.8rem; opacity:.85; margin-top:.3rem; }
+.avail-shortage { background:#fdecea; border-color:#f2c2bc; color:#6e1a13; }
+.avail-shortage .avail-icon { background:#b42318; }
+.avail-discontinued { background:#fff4e3; border-color:#efd2a4; color:#633d0c; }
+.avail-discontinued .avail-icon { background:#b86e00; }
+.avail-shortage a, .avail-discontinued a { color:inherit;
+  text-decoration:underline; }
+.avail-quiet { display:flex; gap:.5rem; align-items:baseline; margin-top:.9rem;
+  font-size:.85rem; color:#5a6b74; }
+.avail-quiet .avail-dot { width:.5rem; height:.5rem; border-radius:50%;
+  background:#3f9b6e; flex:0 0 auto; align-self:center; }
+.avail-quiet.stale .avail-dot { background:#c98a1b; }
 
 /* Set directly rather than through a Bootstrap theme variable, so bslib does
    not have to recompile Sass on every visitor's first load. */
@@ -372,6 +402,98 @@ field <- function(label, value) {
   div(div(class = "field-label", label), div(class = "field-value", value))
 }
 
+#' "1 June 2025". Windows' strftime has no %-d, hence the sub().
+fmt_day <- function(d) sub("^0", "", format(d, "%d %B %Y"))
+
+#' The availability section at the top of a drug page.
+#'
+#' An alert for each FDA shortage or discontinuation listing that matches the
+#' product, with the reason, the date and the sponsor's number -- the call a
+#' clinic makes next. With no listing, a single quiet line that says what was
+#' checked and when, and what the check does not cover: FDA's lists hold only
+#' what sponsors report, so "not listed" is not "in stock".
+availability_ui <- function(pid) {
+  if (nrow(AVAILABILITY_META) == 0) {
+    return(div(class = "avail-quiet stale", span(class = "avail-dot"),
+      span("FDA's animal drug shortage list was not checked for this build.")))
+  }
+
+  checked <- min(AVAILABILITY_META$checkedDate)
+  stale   <- as.numeric(Sys.Date() - checked) > AVAILABILITY_STALE_DAYS
+  checked_txt <- paste0("checked ", fmt_day(checked),
+                        if (stale) " — over two weeks ago, so this may be out of date"
+                        else "")
+
+  hits <- AVAILABILITY |> filter(proprietaryNameId == pid)
+  meta_for <- function(kind) {
+    src <- if (kind == "discontinued") "discontinued" else "shortage"
+    AVAILABILITY_META |> filter(source == src) |> slice(1)
+  }
+  contact <- function(h) {
+    if (is.na(h$firm) && is.na(h$phone)) return(NULL)
+    # One string up to the phone link: tagList puts a space between its
+    # parts, which printed "Intervet, Inc. , 800-...".
+    tagList(br(),
+      paste0("Sponsor: ", coalesce(h$firm, ""), if (!is.na(h$phone)) "," else ""),
+      if (!is.na(h$phone))
+        tags$a(href = paste0("tel:", str_remove_all(h$phone, "[^0-9]")), h$phone)
+      else NULL)
+  }
+  source_line <- function(h) {
+    m <- meta_for(h$kind)
+    div(class = "avail-meta",
+      "Source: ", tags$a(href = h$sourceUrl, target = "_blank", rel = "noopener",
+                         m$title %||% "FDA"),
+      if (nrow(m) && !is.na(m$pageUpdated))
+        sprintf(" (FDA page updated %s)", fmt_day(m$pageUpdated)) else NULL,
+      " · ", checked_txt)
+  }
+
+  alerts <- map(seq_len(nrow(hits)), function(i) {
+    h <- hits[i, ]
+    switch(h$kind,
+      shortage = div(class = "avail-alert avail-shortage", role = "alert",
+        span(class = "avail-icon", `aria-hidden` = "true", "!"),
+        div(class = "avail-body",
+          div(class = "avail-title", "Backorder: in shortage"),
+          sprintf("FDA lists %s in shortage%s.", h$fdaProduct,
+                  if (!is.na(h$began)) paste0(" since ", fmt_day(h$began)) else ""),
+          if (!is.na(h$reason)) paste0(" Reason: ", str_remove(h$reason, "\\.$"), ".")
+          else NULL,
+          contact(h),
+          source_line(h))),
+      discontinued = div(class = "avail-alert avail-discontinued", role = "alert",
+        span(class = "avail-icon", `aria-hidden` = "true", "!"),
+        div(class = "avail-body",
+          div(class = "avail-title", "Discontinued by the sponsor"),
+          sprintf("FDA lists %s as discontinued%s.", h$fdaProduct,
+                  if (!is.na(h$posted)) paste0(" (posted ", fmt_day(h$posted), ")")
+                  else ""),
+          if (!is.na(h$info)) paste0(" ", str_to_sentence(h$info), ".") else NULL,
+          contact(h),
+          source_line(h))),
+      resolved = div(class = "avail-quiet", span(class = "avail-dot"),
+        span(sprintf("An FDA-listed shortage of %s was resolved%s.", h$fdaProduct,
+                     if (!is.na(h$resolved)) paste0(" on ", fmt_day(h$resolved))
+                     else ""),
+             " ", tags$a(href = h$sourceUrl, target = "_blank", rel = "noopener",
+                         "FDA shortage list"), " · ", checked_txt)),
+      NULL)
+  })
+
+  if (!any(hits$kind %in% c("shortage", "discontinued"))) {
+    alerts <- c(alerts, list(
+      div(class = paste("avail-quiet", if (stale) "stale" else ""),
+        span(class = "avail-dot"),
+        span(paste0("Not on FDA's animal drug shortage or discontinued lists · ",
+                    checked_txt, ". "),
+             span(class = "text-muted",
+                  "These lists hold only what sponsors report to FDA; ",
+                  "distributor backorders are not included.")))))
+  }
+  tagList(alerts)
+}
+
 detail_ui <- function() {
   tagList(
     div(class = "d-flex align-items-center gap-3 mt-3 mb-2",
@@ -572,6 +694,10 @@ server <- function(input, output, session) {
         Ingredients = coalesce(ingredients, ""),
         Type        = category,
         Status      = marketStatus,
+        # Read by the Status cell. An index built before the column existed
+        # still renders, just without the badge.
+        Dispensing  = if ("dispensingStatus" %in% names(d))
+                        coalesce(dispensingStatus, "") else "",
         Labeler     = coalesce(sponsorName, ""),
         Form        = coalesce(doseFormName, ""),
         Species     = coalesce(speciesList, ""),
@@ -608,9 +734,17 @@ server <- function(input, output, session) {
         Type = colDef(minWidth = 130, html = TRUE, cell = function(v) {
           sprintf('<span class="badge-cat %s">%s</span>', category_class(v), v)
         }),
-        Status = colDef(minWidth = 120, html = TRUE, cell = function(v) {
-          if (identical(v, "Voluntarily withdrawn"))
-            '<span class="badge-withdrawn">Withdrawn</span>' else v
+        # "RX, currently marketed": the dispensing class leads, colored like
+        # the Type badges, so Rx and OTC products can be told apart at a
+        # glance down the column. Sorting still follows market status.
+        Dispensing = colDef(show = FALSE),
+        Status = colDef(minWidth = 170, html = TRUE, cell = function(v, index) {
+          disp <- dispensing_badge(tbl$Dispensing[index])
+          market <- if (identical(v, "Voluntarily withdrawn"))
+            '<span class="badge-withdrawn">Withdrawn</span>'
+          else htmltools::htmlEscape(if (nzchar(disp)) str_to_lower(v) else v)
+          sprintf('<span class="status-cell">%s%s</span>', disp,
+                  if (nzchar(disp)) paste0(", ", market) else market)
         }),
         Labeler = colDef(minWidth = 150),
         Form = colDef(minWidth = 110),
@@ -731,6 +865,9 @@ server <- function(input, output, session) {
                 " and by FDA's own indication text" else
                 " and by the product's DailyMed label"))
         else NULL,
+        # Shortage and discontinuation status, directly under the name: it is
+        # the first thing that decides whether the rest of the page matters.
+        availability_ui(pid),
         hr(),
         layout_columns(
           col_widths = c(4, 4, 4),
@@ -771,7 +908,10 @@ server <- function(input, output, session) {
                 if (nrow(ings)) paste(unique(ings$activeIngredientName), collapse = ", ")
                 else or_none(NA)),
           field("Labeler / sponsor", or_none(app$sponsorName)),
-          field("Dispensing status", or_none(prod$dispensingStatus))
+          field("Dispensing status",
+                if (nzchar(dispensing_badge(prod$dispensingStatus)))
+                  HTML(dispensing_badge(prod$dispensingStatus))
+                else or_none(NA))
         ),
         layout_columns(
           col_widths = c(4, 4, 4),

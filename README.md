@@ -32,6 +32,8 @@ For each drug:
 | FOI summaries, product labels, SPL | ADAFDA document endpoints |
 | Pioneer product | ADAFDA `pioneerApplicationNumber` |
 | Professional guidance | Curated map in `data/reference/guidelines.csv` |
+| Dispensing status (RX / OTC / VFD) | ADAFDA, shown with market status in the results table |
+| Shortage / discontinued alert | FDA CVM shortage and discontinued lists, checked weekly |
 
 Product type is collapsed from FDA's separate type and status codes into four
 categories — **NADA / Approved**, **ANADA / Generic**, **Conditional
@@ -55,6 +57,7 @@ Then, from the project root:
 source("R/01_fetch_adafda.R")     # ~15 min, ~5,000 requests
 source("R/02_tidy_greenbook.R")   # ~1 min
 source("R/03_ndc_dailymed.R")     # optional, ~25 min; adds NDC codes
+source("R/05_availability.R")     # optional, seconds; FDA shortage lists (needs rvest)
 shiny::runApp("app")
 ```
 
@@ -150,6 +153,33 @@ schtasks /Delete /TN "GreenBook Monthly Update" /F
 
 The wrapper hard-codes the R path (`R-4.5.2`). Update it after an R upgrade or
 the task will fail — it logs the reason rather than failing silently.
+
+## Weekly shortage check
+
+`R/05_availability.R` reads FDA CVM's two public tables,
+[Current and Resolved Animal Drug Shortages][cvm-short] and
+[Discontinued Animal Drugs][cvm-disc], and matches each entry to Green Book
+products by application number (narrowed by product name when one application
+carries several products, as 113-645 does for Estrumate and Heifex). Entries
+with no application number, usually unapproved or human-labeled products, fall
+back to product name plus sponsor, and are listed in the run summary if nothing
+matches.
+
+The drug page shows a red **!** alert for a current shortage and an amber one
+for a discontinuation, with FDA's reason, the date and the sponsor's phone
+number. A product not on either list gets one quiet line with the check date,
+because FDA's lists hold only what sponsors report — "not listed" is not "in
+stock". Distributor backorders (Covetrus, MWI, Patterson) are not included:
+they sit behind clinic logins.
+
+The GitHub workflow runs this every Monday on its own schedule, rebuilding the
+site from cached tables without redoing the monthly crawl. If FDA restructures
+either page the script stops rather than writing an empty list, the previous
+list stays in place, the drug page warns once the check is over two weeks old,
+and the workflow files a `shortage-check` issue.
+
+[cvm-short]: https://www.fda.gov/animal-veterinary/product-safety-information/current-and-resolved-animal-drug-shortages
+[cvm-disc]: https://www.fda.gov/animal-veterinary/product-safety-information/discontinued-animal-drugs
 
 ### FDA's application type is wrong for 4 conditional approvals
 

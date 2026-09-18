@@ -96,6 +96,28 @@ NDC <- read_table("ndc") %||%
   tibble(proprietaryNameId = integer(), ndc = character(), setid = character(),
          matchType = character(), splTitle = character(), dailymedUrl = character())
 
+# FDA's animal drug shortage and discontinuation lists, matched to products by
+# R/05_availability.R, which runs weekly. Optional like NDC: without it the
+# drug page says the list has not been checked rather than implying "no
+# shortage".
+AVAILABILITY <- read_table("availability") %||%
+  tibble(proprietaryNameId = integer(), kind = character(),
+         fdaIngredient = character(), fdaProduct = character(),
+         firm = character(), phone = character(), reason = character(),
+         began = as.Date(character()), resolved = as.Date(character()),
+         posted = as.Date(character()), info = character(),
+         applicationNumber = integer(), matchedBy = character(),
+         sourceUrl = character())
+
+AVAILABILITY_META <- read_table("availability_meta") %||%
+  tibble(source = character(), title = character(), url = character(),
+         pageUpdated = as.Date(character()), checkedDate = as.Date(character()))
+
+# The check runs weekly. Past this, the page warns that the list may be out of
+# date: a failed run leaves the previous list in place, and a stale "not in
+# shortage" must not read as a current one.
+AVAILABILITY_STALE_DAYS <- 14
+
 # A linked paper or guideline must not be more than this many years old.
 # Clinical recommendations go stale; an out-of-date consensus statement is
 # worse than no link, because it carries the authority of the issuing body
@@ -154,6 +176,17 @@ category_class <- function(x) {
     x == "Emergency Use Authorization" ~ "cat-eua",
     TRUE                               ~ "cat-other"
   )
+}
+
+#' Badge for the dispensing class FDA records per product: RX, OTC, VFD, or
+#' the dozen products labeled RX/OTC. Missing for about 100 products, which
+#' get no badge rather than a guess.
+dispensing_badge <- function(x) {
+  if (is.null(x) || length(x) == 0 || is.na(x[1]) || !nzchar(x[1])) return("")
+  cls <- switch(x[1], RX = "disp-rx", OTC = "disp-otc", VFD = "disp-vfd",
+                "disp-mixed")
+  sprintf('<span class="badge-cat %s">%s</span>', cls,
+          htmltools::htmlEscape(x[1]))
 }
 
 # Conditional-approval detection lives in R/02_tidy_greenbook.R
